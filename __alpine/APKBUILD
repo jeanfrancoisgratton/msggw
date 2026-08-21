@@ -1,0 +1,35 @@
+# Maintainer: J.F. Gratton <jean-francois@famillegratton.net>
+# Packager: Package builder <builder@famillegratton.net>
+pkgname=msggw
+pkgver=0.0.1
+pkgrel=1
+pkgdir=/data/packages
+pkgdesc="Messages <-> Mattermost bridge"
+url="https://git.famillegratton.net:3000/mainline/msggw.git"
+arch=x86_64
+license="GPL-3.0-or-later"
+#depends="gcompat"
+install="$pkgname.pre-install $pkgname.post-install $pkgname.pre-upgrade $pkgname.post-upgrade $pkgname.pre-deinstall $pkgname.post-deinstall"
+#source="$pkgname-$pkgver-$pkgrel.tar.bz2::http://localhost/$pkgname-$pkgver-$pkgrel.tar.bz2"
+builddir="$startdir/src/BUILD"
+
+binaryname=msg-gw
+
+prepare() {
+	mkdir -p "$builddir"
+	cp -R "$startdir"/../src/* "$builddir"/
+}
+
+build() {
+	cd "$builddir"
+
+	go env | egrep 'GOFLAGS|CGO_ENABLED|GOOS|GOARCH' || true
+
+	# Static, non-PIE, internal linker
+	go build -trimpath -ldflags="-s -w -buildid= -linkmode=internal" -o "$binaryname" .
+}
+
+package() {
+	install -d "$pkgdir"/opt/bin
+	install -m755 "$builddir/$binaryname" "$pkgdir/opt/bin/$binaryname"
+}

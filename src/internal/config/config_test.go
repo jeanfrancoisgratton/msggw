@@ -1,0 +1,228 @@
+// rcs_gateway
+// Written by J.F. Gratton <jean-francois@famillegratton.net>
+// Original timestamp: 2026.08.16 20:10:51
+// Original filename: src/internal/config/config_test.go
+
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// writeConfig writes body to a temporary file and returns its path.
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("writing the test configuration: %v", err)
+	}
+	return path
+}
+
+// TestSampleIsValid guards the sample the "config sample" command prints: an
+// invalid sample turns every new deployment into a debugging session.
+func TestSampleIsValid(t *testing.T) {
+	cfg, err := Load(writeConfig(t, Sample()))
+	if err != nil {
+		t.Fatalf("the shipped sample configuration does not load: %v", err)
+	}
+
+	if cfg.Routing.Default.Type != DestChannel {
+		t.Errorf("sample default route type = %q, want %q", cfg.Routing.Default.Type, DestChannel)
+	}
+	if len(cfg.Routing.Rules) == 0 {
+		t.Error("the sample has no routing rules, so it does not demonstrate routing")
+	}
+	if !cfg.ThreadPerConversationEnabled() {
+		t.Error("the sample turns threads off, which is not the documented default")
+	}
+}
+
+const minimalConfig = `{
+  "gmessages": {"session_ref": "file:/tmp/session.json"},
+  "mattermost": {"url": "https://mm.example.net", "token_ref": "env:TOKEN"},
+  "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}
+}`
+
+func TestLoadAppliesDefaults(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimalConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.StateDir != "/var/lib/rcs_gateway" {
+		t.Errorf("StateDir = %q, want the documented default", cfg.StateDir)
+	}
+	// A relative database name has to end up inside the state directory, or
+	// the daemon writes it into whatever directory it was started from.
+	if want := "/var/lib/rcs_gateway/rcs_gateway.db"; cfg.Database != want {
+		t.Errorf("Database = %q, want %q", cfg.Database, want)
+	}
+	if !cfg.ThreadPerConversationEnabled() {
+		t.Error("thread_per_conversation should default to on")
+	}
+	if cfg.RequestTimeout() == 0 || cfg.ReconnectBackoff() == 0 {
+		t.Error("the Mattermost timeouts should have non-zero defaults")
+	}
+}
+
+func TestLoadRejectsUnknownFields(t *testing.T) {
+	body := `{"state_dir": "/tmp", "state_directory": "/tmp",
+	  "gmessages": {"session_ref": "file:/tmp/s"},
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a misspelled key was accepted; it should be rejected")
+	}
+	if !strings.Contains(err.Error(), "state_directory") {
+		t.Errorf("the error does not name the offending key: %v", err)
+	}
+}
+
+// TestSessionRefMustBeWritable covers the trap that would otherwise cost a
+// re-pairing on every restart: libgm refreshes its auth token and the new one
+// has to go somewhere.
+func TestSessionRefMustBeWritable(t *testing.T) {
+	for _, ref := range []string{"env:GM_SESSION", "literal:{}"} {
+		body := strings.Replace(minimalConfig, "file:/tmp/session.json", ref, 1)
+		_, err := Load(writeConfig(t, body))
+		if err == nil {
+			t.Errorf("session_ref %q was accepted, but it cannot be written back", ref)
+			continue
+		}
+		if !strings.Contains(err.Error(), "session_ref") {
+			t.Errorf("session_ref %q: the error does not explain the problem: %v", ref, err)
+		}
+	}
+}
+
+func TestDestinationValidate(t *testing.T) {
+	tests := []struct {
+		name string
+		dest Destination
+		ok   bool
+	}{
+		{"channel by name", Destination{Type: DestChannel, Team: "t", Channel: "c"}, true},
+		{"channel missing team", Destination{Type: DestChannel, Channel: "c"}, false},
+		{"channel by id", Destination{Type: DestChannelID, ChannelID: "abc"}, true},
+		{"channel id missing", Destination{Type: DestChannelID}, false},
+		{"direct", Destination{Type: DestDirect, User: "jf"}, true},
+		{"direct missing user", Destination{Type: DestDirect}, false},
+		{"group", Destination{Type: DestGroup, Users: []string{"a", "b"}}, true},
+		{"group too small", Destination{Type: DestGroup, Users: []string{"a"}}, false},
+		{"group too large", Destination{Type: DestGroup, Users: []string{"a", "b", "c", "d", "e", "f", "g", "h"}}, false},
+		{"no type", Destination{}, false},
+		{"unknown type", Destination{Type: "carrier pigeon"}, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.dest.Validate()
+			if tc.ok && err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+			if !tc.ok && err == nil {
+				t.Error("Validate() = nil, want an error")
+			}
+		})
+	}
+}
+
+func TestRuleWithoutCriteriaIsRejected(t *testing.T) {
+	body := `{
+	  "gmessages": {"session_ref": "file:/tmp/s"},
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "routing": {
+	    "default": {"type": "channel", "team": "t", "channel": "c"},
+	    "rules": [{"name": "oops", "destination": {"type": "direct", "user": "jf"}}]
+	  }}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a rule with no criteria was accepted; it would never match")
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("the error does not name the offending rule: %v", err)
+	}
+}
+
+func TestDatabaseDriverDefaultsToSQLite(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimalConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DatabaseDriver != DatabaseDriverSQLite {
+		t.Errorf("DatabaseDriver = %q, want %q", cfg.DatabaseDriver, DatabaseDriverSQLite)
+	}
+}
+
+func TestPostgresDriverRequiresDSNRef(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_driver": "postgres", "gmessages"`, 1)
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("database_driver \"postgres\" without database_dsn_ref was accepted")
+	}
+	if !strings.Contains(err.Error(), "database_dsn_ref") {
+		t.Errorf("the error does not name the missing field: %v", err)
+	}
+}
+
+func TestPostgresDriverIsAccepted(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"gmessages"`,
+		`"database_driver": "postgres", "database_dsn_ref": "env:PG_DSN", "gmessages"`, 1)
+
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// A postgres config has no SQLite file to default or resolve inside
+	// state_dir; leaving it empty must not be treated as a mistake.
+	if cfg.Database != "" {
+		t.Errorf("Database = %q, want empty when database_driver is postgres", cfg.Database)
+	}
+}
+
+func TestSQLiteDriverRejectsDSNRef(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_dsn_ref": "env:PG_DSN", "gmessages"`, 1)
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("database_dsn_ref with the default sqlite driver was accepted")
+	}
+	if !strings.Contains(err.Error(), "database_dsn_ref") {
+		t.Errorf("the error does not name the offending field: %v", err)
+	}
+}
+
+func TestUnknownDatabaseDriverIsRejected(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_driver": "mysql", "gmessages"`, 1)
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("an unknown database_driver was accepted")
+	}
+	if !strings.Contains(err.Error(), "database_driver") {
+		t.Errorf("the error does not name the offending field: %v", err)
+	}
+}
+
+func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
+	body := `{
+	  "gmessages": {"session_ref": "file:/tmp/s"},
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "routing": {
+	    "default": {"type": "channel", "team": "t", "channel": "c"},
+	    "rules": [{"name": "both", "groups_only": true, "directs_only": true,
+	               "destination": {"type": "direct", "user": "jf"}}]
+	  }}`
+
+	if _, err := Load(writeConfig(t, body)); err == nil {
+		t.Fatal("a rule that is both groups-only and directs-only was accepted")
+	}
+}

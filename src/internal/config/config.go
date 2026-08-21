@@ -1,0 +1,294 @@
+// rcs_gateway
+// Written by J.F. Gratton <jean-francois@famillegratton.net>
+// Original timestamp: 2026.08.16 19:44:03
+// Original filename: src/internal/config/config.go
+
+// Package config reads and validates the daemon's JSON configuration.
+//
+// Nothing in here reaches out to Vault, Mattermost or Google: Load only proves
+// that the configuration is internally coherent. Credentials are resolved, and
+// therefore fail, at the point they are used.
+package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// DefaultPath is where the daemon looks when no --config is given.
+const DefaultPath = "/etc/rcs_gateway/config.json"
+
+// UserPath is the per-user fallback, used when DefaultPath does not exist.
+// It lets the daemon run unprivileged without an /etc entry.
+func UserPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "rcs_gateway", "config.json")
+}
+
+// Load reads the configuration from path, applies defaults and validates it.
+// An empty path means DefaultPath, falling back to UserPath.
+func Load(path string) (*Config, error) {
+	if path == "" {
+		var err error
+		if path, err = discover(); err != nil {
+			return nil, err
+		}
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading configuration %s: %w", path, err)
+	}
+
+	var cfg Config
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	// A typo in a key name would otherwise be silently ignored and leave the
+	// daemon running with a default nobody asked for.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parsing configuration %s: %w", path, err)
+	}
+	cfg.path = path
+
+	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", path, err)
+	}
+	return &cfg, nil
+}
+
+func discover() (string, error) {
+	if _, err := os.Stat(DefaultPath); err == nil {
+		return DefaultPath, nil
+	}
+	if userPath := UserPath(); userPath != "" {
+		if _, err := os.Stat(userPath); err == nil {
+			return userPath, nil
+		}
+		return "", fmt.Errorf("no configuration found at %s or %s (see --config)", DefaultPath, userPath)
+	}
+	return "", fmt.Errorf("no configuration found at %s (see --config)", DefaultPath)
+}
+
+// Path returns the file this configuration was read from.
+func (c *Config) Path() string { return c.path }
+
+func (c *Config) applyDefaults() {
+	if c.StateDir == "" {
+		c.StateDir = "/var/lib/rcs_gateway"
+	}
+	if c.DatabaseDriver == "" {
+		c.DatabaseDriver = DatabaseDriverSQLite
+	}
+	if c.DatabaseDriver == DatabaseDriverSQLite {
+		if c.Database == "" {
+			c.Database = "rcs_gateway.db"
+		}
+		if !filepath.IsAbs(c.Database) {
+			c.Database = filepath.Join(c.StateDir, c.Database)
+		}
+	}
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+	if c.Log.Format == "" {
+		c.Log.Format = "text"
+	}
+	if c.Mattermost.ReconnectBackoffSeconds == 0 {
+		c.Mattermost.ReconnectBackoffSeconds = 5
+	}
+	if c.Mattermost.RequestTimeoutSeconds == 0 {
+		c.Mattermost.RequestTimeoutSeconds = 30
+	}
+	if c.Routing.ThreadPerConversation == nil {
+		enabled := true
+		c.Routing.ThreadPerConversation = &enabled
+	}
+}
+
+// Validate reports every problem it can find, so that fixing a config file
+// does not turn into one restart per mistake.
+func (c *Config) Validate() error {
+	var problems []error
+
+	switch c.DatabaseDriver {
+	case DatabaseDriverSQLite:
+		if c.DatabaseDSNRef != "" {
+			problems = append(problems, errors.New("database_dsn_ref is only used when database_driver is \"postgres\""))
+		}
+	case DatabaseDriverPostgres:
+		if c.DatabaseDSNRef == "" {
+			problems = append(problems, errors.New("database_dsn_ref is required when database_driver is \"postgres\""))
+		}
+	default:
+		problems = append(problems, fmt.Errorf("database_driver %q must be %q or %q",
+			c.DatabaseDriver, DatabaseDriverSQLite, DatabaseDriverPostgres))
+	}
+
+	if c.GMessages.SessionRef == "" {
+		problems = append(problems, errors.New("gmessages.session_ref is required"))
+	} else if strings.HasPrefix(c.GMessages.SessionRef, "env:") ||
+		strings.HasPrefix(c.GMessages.SessionRef, "literal:") {
+		problems = append(problems, fmt.Errorf(
+			"gmessages.session_ref is %q, but the session has to be written back when its auth token is refreshed: use file:, encoded: or vault:",
+			c.GMessages.SessionRef))
+	}
+
+	if c.Mattermost.URL == "" {
+		problems = append(problems, errors.New("mattermost.url is required"))
+	} else if !strings.HasPrefix(c.Mattermost.URL, "http://") && !strings.HasPrefix(c.Mattermost.URL, "https://") {
+		problems = append(problems, fmt.Errorf("mattermost.url %q must start with http:// or https://", c.Mattermost.URL))
+	}
+	if c.Mattermost.TokenRef == "" {
+		problems = append(problems, errors.New("mattermost.token_ref is required"))
+	}
+
+	if err := c.Routing.Default.Validate(); err != nil {
+		problems = append(problems, fmt.Errorf("routing.default: %w", err))
+	}
+	for i, rule := range c.Routing.Rules {
+		label := fmt.Sprintf("routing.rules[%d]", i)
+		if rule.Name != "" {
+			label = fmt.Sprintf("routing.rules[%d] (%s)", i, rule.Name)
+		}
+		if err := rule.validate(); err != nil {
+			problems = append(problems, fmt.Errorf("%s: %w", label, err))
+		}
+	}
+
+	switch c.Log.Level {
+	case "debug", "info", "warn", "error":
+	default:
+		problems = append(problems, fmt.Errorf("log.level %q must be debug, info, warn or error", c.Log.Level))
+	}
+	switch c.Log.Format {
+	case "text", "json":
+	default:
+		problems = append(problems, fmt.Errorf("log.format %q must be text or json", c.Log.Format))
+	}
+
+	return errors.Join(problems...)
+}
+
+// Validate checks that a destination names something Mattermost can resolve.
+func (d Destination) Validate() error {
+	switch d.Type {
+	case DestChannel:
+		if d.Team == "" || d.Channel == "" {
+			return errors.New(`type "channel" needs both "team" and "channel"`)
+		}
+	case DestChannelID:
+		if d.ChannelID == "" {
+			return errors.New(`type "channel_id" needs "channel_id"`)
+		}
+	case DestDirect:
+		if d.User == "" {
+			return errors.New(`type "direct" needs "user"`)
+		}
+	case DestGroup:
+		if len(d.Users) < 2 {
+			return errors.New(`type "group" needs at least two entries in "users"`)
+		}
+		if len(d.Users) > 7 {
+			return fmt.Errorf(`type "group" allows at most 7 entries in "users", got %d`, len(d.Users))
+		}
+	case "":
+		return fmt.Errorf(`"type" is required: one of %q, %q, %q, %q`,
+			DestChannel, DestChannelID, DestDirect, DestGroup)
+	default:
+		return fmt.Errorf(`unknown type %q: expected one of %q, %q, %q, %q`,
+			d.Type, DestChannel, DestChannelID, DestDirect, DestGroup)
+	}
+	return nil
+}
+
+// String renders a destination for logs.
+func (d Destination) String() string {
+	switch d.Type {
+	case DestChannel:
+		return "~" + d.Team + "/" + d.Channel
+	case DestChannelID:
+		return "channel " + d.ChannelID
+	case DestDirect:
+		return "DM with @" + d.User
+	case DestGroup:
+		return "group DM with @" + strings.Join(d.Users, ", @")
+	default:
+		return "invalid destination"
+	}
+}
+
+func (r Rule) validate() error {
+	var problems []error
+
+	if len(r.ConversationIDs) == 0 && len(r.Phones) == 0 && r.NamePattern == "" &&
+		!r.GroupsOnly && !r.DirectsOnly {
+		problems = append(problems, errors.New("has no criteria, so it would never match"))
+	}
+	if r.GroupsOnly && r.DirectsOnly {
+		problems = append(problems, errors.New("sets both groups_only and directs_only, so it can never match"))
+	}
+	if r.NamePattern != "" {
+		if _, err := regexp.Compile(r.NamePattern); err != nil {
+			problems = append(problems, fmt.Errorf("name_pattern is not a valid regular expression: %w", err))
+		}
+	}
+	if err := r.Destination.Validate(); err != nil {
+		problems = append(problems, fmt.Errorf("destination: %w", err))
+	}
+
+	return errors.Join(problems...)
+}
+
+// ThreadPerConversationEnabled reads the tri-state flag after defaults.
+func (c *Config) ThreadPerConversationEnabled() bool {
+	return c.Routing.ThreadPerConversation == nil || *c.Routing.ThreadPerConversation
+}
+
+// RequestTimeout is the per-REST-call bound.
+func (c *Config) RequestTimeout() time.Duration {
+	return time.Duration(c.Mattermost.RequestTimeoutSeconds) * time.Second
+}
+
+// ReconnectBackoff is the initial WebSocket reconnect delay.
+func (c *Config) ReconnectBackoff() time.Duration {
+	return time.Duration(c.Mattermost.ReconnectBackoffSeconds) * time.Second
+}
+
+// PingInterval is how often libgm should ping the phone; 0 keeps its default.
+func (c *Config) PingInterval() time.Duration {
+	return time.Duration(c.GMessages.PingIntervalSeconds) * time.Second
+}
+
+// SlogLevel maps the configured level onto slog's.
+func (c *Config) SlogLevel() slog.Level {
+	switch c.Log.Level {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// NewLogger builds the daemon's logger from the log section.
+func (c *Config) NewLogger(w *os.File) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: c.SlogLevel()}
+	if c.Log.Format == "json" {
+		return slog.New(slog.NewJSONHandler(w, opts))
+	}
+	return slog.New(slog.NewTextHandler(w, opts))
+}

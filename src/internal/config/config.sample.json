@@ -1,0 +1,60 @@
+{
+  "state_dir": "/var/lib/rcs_gateway",
+  "database": "rcs_gateway.db",
+
+  "log": {
+    "level": "info",
+    "format": "text"
+  },
+
+  "vault": {
+    "address": "https://vault.example.net:8200",
+    "token_ref": "env:VAULT_TOKEN"
+  },
+
+  "gmessages": {
+    "session_ref": "encoded:/var/lib/rcs_gateway/gmessages.session.enc",
+    "ping_interval_seconds": 60,
+    "force_rcs": true,
+    "mark_read_on_bridge": false,
+    "backfill_count": 0
+  },
+
+  "mattermost": {
+    "url": "https://mattermost.example.net",
+    "token_ref": "file:/etc/rcs_gateway/mattermost.token",
+    "insecure_skip_verify": false,
+    "reconnect_backoff_seconds": 5,
+    "request_timeout_seconds": 30
+  },
+
+  "routing": {
+    "default": {
+      "type": "channel",
+      "team": "myteam",
+      "channel": "messages"
+    },
+    "rules": [
+      {
+        "name": "family goes to my DMs",
+        "phones": ["+1 514 555-1212", "+15145551213"],
+        "destination": {
+          "type": "direct",
+          "user": "jfgratton"
+        }
+      },
+      {
+        "name": "group chats get their own channel",
+        "groups_only": true,
+        "destination": {
+          "type": "channel",
+          "team": "myteam",
+          "channel": "group-messages"
+        }
+      }
+    ],
+    "thread_per_conversation": true,
+    "post_delivery_status": true,
+    "join_channels": true
+  }
+}

@@ -1,0 +1,118 @@
+// rcs_gateway
+// Written by J.F. Gratton <jean-francois@famillegratton.net>
+// Original timestamp: 2026.08.16 20:08:41
+// Original filename: src/cmd/config.go
+
+package cmd
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"rcs_gateway/internal/config"
+	"rcs_gateway/internal/secrets"
+)
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Inspect and validate the configuration",
+}
+
+var configSampleCmd = &cobra.Command{
+	Use:   "sample",
+	Short: "Print a sample configuration file",
+	Long: `Print a sample configuration file on standard output.
+
+  rcs-mm_gw config sample > /etc/rcs_gateway/config.json`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_, err := fmt.Fprint(cmd.OutOrStdout(), config.Sample())
+		return err
+	},
+}
+
+var configCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Validate the configuration and resolve its secrets",
+	Long: `Validate the configuration file and check that every secret it refers to can
+actually be read. Nothing is sent to Mattermost or to Google.
+
+Secret values are never printed: only where each one comes from, and whether it
+could be read.`,
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadConfig()
+		if err != nil {
+			return err
+		}
+
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "configuration : %s\n", cfg.Path())
+		fmt.Fprintf(out, "state dir     : %s\n", cfg.StateDir)
+		fmt.Fprintf(out, "db driver     : %s\n", cfg.DatabaseDriver)
+		if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
+			fmt.Fprintf(out, "database      : (see database_dsn_ref below)\n")
+		} else {
+			fmt.Fprintf(out, "database      : %s\n", cfg.Database)
+		}
+		fmt.Fprintf(out, "mattermost    : %s\n", cfg.Mattermost.URL)
+		fmt.Fprintf(out, "default route : %s\n", cfg.Routing.Default.String())
+		fmt.Fprintf(out, "routing rules : %d\n", len(cfg.Routing.Rules))
+		fmt.Fprintf(out, "threads       : %v\n", cfg.ThreadPerConversationEnabled())
+
+		var problems []error
+
+		fmt.Fprintln(out)
+		problems = append(problems, checkSecret(cmd, "mattermost token", cfg.Mattermost.TokenRef, cfg, true))
+		problems = append(problems, checkSecret(cmd, "gmessages session", cfg.GMessages.SessionRef, cfg, false))
+		if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
+			problems = append(problems, checkSecret(cmd, "database dsn", cfg.DatabaseDSNRef, cfg, true))
+		}
+
+		for _, problem := range problems {
+			if problem != nil {
+				return fmt.Errorf("the configuration is not usable as it stands")
+			}
+		}
+
+		fmt.Fprintln(out, "\nthe configuration is valid")
+		return nil
+	},
+}
+
+// checkSecret reports whether a secret reference resolves and can be read.
+// A session that does not exist yet is not a problem — that is what pairing is
+// for — so mustExist distinguishes the two cases.
+func checkSecret(cmd *cobra.Command, label, ref string, cfg *config.Config, mustExist bool) error {
+	out := cmd.OutOrStdout()
+
+	store, err := secrets.Open(ref, cfg.Vault)
+	if err != nil {
+		fmt.Fprintf(out, "%-18s: BAD REFERENCE — %v\n", label, err)
+		return err
+	}
+
+	value, err := store.Load()
+	switch {
+	case err == nil && len(value) > 0:
+		fmt.Fprintf(out, "%-18s: %s (%d bytes)\n", label, store.Describe(), len(value))
+		return nil
+	case err == nil, errors.Is(err, secrets.ErrNotFound):
+		if mustExist {
+			fmt.Fprintf(out, "%-18s: %s — EMPTY\n", label, store.Describe())
+			return fmt.Errorf("%s is empty", label)
+		}
+		fmt.Fprintf(out, "%-18s: %s — not stored yet, run \"rcs-mm_gw pair\"\n", label, store.Describe())
+		return nil
+	default:
+		fmt.Fprintf(out, "%-18s: %s — UNREADABLE: %v\n", label, store.Describe(), err)
+		return err
+	}
+}
+
+func init() {
+	configCmd.AddCommand(configSampleCmd, configCheckCmd)
+}

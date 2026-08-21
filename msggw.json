@@ -1,0 +1,20 @@
+{
+  "softwarename": "msggw",
+  "binaryname": "msg-gw",
+  "goversion": "1.26.6",
+  "versionnumber": "0.0.1",
+  "releasenumber": "1",
+  "description": "Messages <-> Mattermost bridge",
+  "maintainer": "J.F. Gratton <jean-francois@famillegratton.net>",
+  "packager": "Package builder <builder@famillegratton.net>",
+  "section": "Messaging tools",
+  "dependencies": "",
+  "url": "https://git.famillegratton.net:3000/mainline/msggw.git",
+  "stubs": {
+    "alpine": true,
+    "debian": true,
+    "redhat": true,
+    "archlinux": true,
+    "skeleton": true
+  }
+}
