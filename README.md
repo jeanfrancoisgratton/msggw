@@ -1,23 +1,26 @@
 <p align="center">
-  <img src="images/rcs_gateway_banner.png" alt="RCS ↔ Mattermost Gateway" width="100%">
+  <img src="images/msggw_banner.png" alt="Messaging ↔ Mattermost Gateway" width="100%">
 </p>
 
-# rcs_gateway
+# msggw
 
-**RCS messages to Mattermost server gateway.**
+**SMS, MMS and RCS to Mattermost gateway — more messaging platforms planned.**
 
-`rcs_gateway` is a small self-hosted Go daemon (`rcs-mm_gw`) that surfaces SMS, MMS and —
-most importantly — **RCS** conversations from an Android phone inside a Mattermost server,
-and lets you reply to them straight from Mattermost.
+`msggw` is a small self-hosted Go daemon (`msg-gw`) that surfaces SMS, MMS and — most
+importantly — **RCS** conversations from an Android phone inside a Mattermost server, and lets
+you reply to them straight from Mattermost. It started life as `rcs_gateway`, focused purely on
+RCS; the project has since been renamed because the goal is broader: one gateway bridging
+several messaging platforms into Mattermost, with Facebook Messenger planned as a future
+addition.
 
 ```text
-Android phone / Google Messages
-            ⇅
-      SMS / MMS / RCS
-            ⇅
-       bridge daemon
-            ⇅
-        Mattermost
+Android phone / Google Messages          Facebook Messenger (planned)
+            ⇅                                        ⇅
+      SMS / MMS / RCS                                 ⇅
+            ⇅                                         ⇅
+                       msggw bridge daemon
+                              ⇅
+                          Mattermost
 ```
 
 ---
@@ -55,7 +58,7 @@ Android phone / Google Messages
 **Written, not yet run against a real phone.**
 
 The daemon is implemented end to end — pairing, session persistence, inbound messages,
-outbound replies, media both ways, delivery state, SQLite mappings and deduplication. It
+outbound replies, media both ways, delivery state, storage mappings and deduplication. It
 builds statically (`CGO_ENABLED=0`), passes `go vet`, and its routing, storage, configuration
 and secret-handling logic are unit-tested.
 
@@ -70,13 +73,15 @@ the known limits, and [docs/TODO.md](docs/TODO.md) for what is left.
 
 ## Building
 
-Go 1.26 or newer. The build is fully static: `modernc.org/sqlite` is a pure-Go driver, so
-there is no cgo and no libc to match at deploy time.
+Go 1.27 or newer. The default backend is fully static: `modernc.org/sqlite` is a pure-Go
+driver, so there is no cgo and no libc to match at deploy time. The optional PostgreSQL backend
+is also a pure-Go driver (`jackc/pgx`), so static builds stay static regardless of which
+storage backend a deployment picks.
 
 ```bash
 cd src
 ./build.sh --dry-run          # compile only, discard the binary
-./build.sh /opt/bin           # build to /opt/bin/rcs-mm_gw
+./build.sh /opt/bin           # build to /opt/bin/msg-gw
 go test ./...
 ```
 
@@ -85,43 +90,43 @@ go test ./...
 ## Using it
 
 ```text
-rcs-mm_gw config sample     print a starting configuration
-rcs-mm_gw config check      validate it and resolve every secret it names
-rcs-mm_gw pair              pair with Google Messages by QR code
-rcs-mm_gw daemon            run the bridge
-rcs-mm_gw status            report on the pairing, the bot and the mappings
-rcs-mm_gw logout            revoke the pairing and delete the session
+msg-gw config sample     print a starting configuration
+msg-gw config check      validate it and resolve every secret it names
+msg-gw pair              pair with Google Messages by QR code
+msg-gw daemon            run the bridge
+msg-gw status            report on the pairing, the bot and the mappings
+msg-gw logout            revoke the pairing and delete the session
 ```
 
 A first run looks like this:
 
 ```bash
-rcs-mm_gw config sample > /etc/rcs_gateway/config.json
-$EDITOR /etc/rcs_gateway/config.json
-rcs-mm_gw config check
-rcs-mm_gw pair              # scan the QR code from Google Messages on the phone
-rcs-mm_gw daemon
+msg-gw config sample > /etc/msggw/config.json
+$EDITOR /etc/msggw/config.json
+msg-gw config check
+msg-gw pair              # scan the QR code from Google Messages on the phone
+msg-gw daemon
 ```
 
-`pair` shows a QR code — on the phone, **Google Messages → Settings → Device pairing → QR
-code scanner**. Each code is valid for 30 seconds and is refreshed automatically. Once the
-phone accepts it, the daemon reconnects with the stored session and prints the conversation
-list, which is the phase-1 success criterion proving the session actually works.
+`pair` shows a QR code — on the phone, **Google Messages → Settings → Device pairing → QR code
+scanner**. Each code is valid for 30 seconds and is refreshed automatically. Once the phone
+accepts it, the daemon reconnects with the stored session and prints the conversation list,
+which is the phase-1 success criterion proving the session actually works.
 
 On a terminal that cannot render a QR code, `pair --print-url` prints the URL instead.
 
-`status` reports what is on disk and, unless given `--offline`, checks that the Google
-session is still honoured and that the Mattermost token still authenticates.
+`status` reports what is on disk and, unless given `--offline`, checks that the Google session
+is still honoured and that the Mattermost token still authenticates.
 
 ---
 
 ## Configuration
 
-One JSON file, looked up at `--config`, then `/etc/rcs_gateway/config.json`, then
-`$XDG_CONFIG_HOME/rcs_gateway/config.json`. Full reference:
+One JSON file, looked up at `--config`, then `/etc/msggw/config.json`, then
+`$XDG_CONFIG_HOME/msggw/config.json`. Full reference:
 **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 
-Two parts are worth knowing about up front.
+Three parts are worth knowing about up front.
 
 ### Where messages land is a routing decision
 
@@ -149,26 +154,48 @@ conversations somewhere other than the default:
 Phone numbers are compared with punctuation ignored, so `+1 (514) 555-1212` and
 `+15145551212` are the same number.
 
+### Storage backend is a choice, not a fixture
+
+The bridge keeps its mappings — which Mattermost thread stands for which conversation, and
+which post stands for which message — behind `database/sql`, so the backend is pluggable:
+
+```text
+sqlite    (default)  a single file under state_dir; what the daemon has actually
+                      been run against, sufficient for one person's message volume
+postgres              for an operator who wants the state store on its own server,
+                      under its own backup and HA story
+```
+
+```json
+"database_driver": "postgres",
+"database_dsn_ref": "vault:secrets/msggw#database_dsn"
+```
+
+Switching backends does not migrate existing data — each keeps its own schema version, so pick
+one before first run. See [Storage backend](docs/CONFIGURATION.md#storage-backend) for the
+full picture.
+
 ### Credentials are references, never values
 
 No secret is written into the configuration file. Each one names where to fetch it from:
 
 ```text
-env:MM_BOT_TOKEN                        environment variable
-file:/etc/rcs_gateway/mm.token          plain file, must be 0600
-encoded:/var/lib/rcs_gateway/gm.enc     helperFunctions-encoded file
-encoded:/path/to/file#PASSPHRASE_VAR    ... with the passphrase from an env var
-vault:secrets/rcs_gateway#bot_token     HashiCorp Vault KV, via vaultLib
-literal:xoxb-...                        inline (discouraged)
+env:MM_BOT_TOKEN                    environment variable
+file:/etc/msggw/mm.token            plain file, must be 0600
+encoded:/var/lib/msggw/gm.enc       helperFunctions-encoded file
+encoded:/path/to/file#PASSPHRASE_VAR ... with the passphrase from an env var
+vault:secrets/msggw#bot_token       HashiCorp Vault KV, via vaultLib
+literal:xoxb-...                    inline (discouraged)
 ```
 
 The Google Messages session must use a *writable* scheme — `file:`, `encoded:` or `vault:` —
 because `libgm` refreshes its auth token while running and the new one has to be persisted;
 otherwise every restart would need a re-pairing. The configuration rejects `env:` and
-`literal:` for that field.
+`literal:` for that field. A PostgreSQL DSN (`database_dsn_ref`) does not need to be writable,
+since the daemon never rewrites it.
 
-`rcs-mm_gw config check` resolves every reference and reports where each secret came from,
-without ever printing its value.
+`msg-gw config check` resolves every reference and reports where each secret came from, without
+ever printing its value.
 
 ---
 
@@ -182,6 +209,9 @@ without ever printing its value.
 Build a self-hosted gateway allowing SMS, MMS and **RCS** conversations from an Android phone
 to appear in Mattermost, with bidirectional replies. The critical requirement is **RCS
 support** — any solution restricted to Android's conventional SMS APIs is insufficient.
+Beyond the Android transports, the longer-term goal is a gateway that isn't tied to a single
+messaging platform: **Facebook Messenger** support is planned as a future addition, using the
+same routing and storage machinery already built for Google Messages.
 
 ### Why not an SMS gateway
 
@@ -222,6 +252,11 @@ protocol, so the daemon behaves conceptually like Google Messages for Web, excep
 is a Go daemon instead of a browser. It therefore carries genuine RCS traffic rather than
 downgrading messages to SMS.
 
+Google Messages is the first transport, not the only one planned. `internal/gmessages` is kept
+isolated from `internal/bridge` and `internal/mattermost` specifically so that a future
+transport — Facebook Messenger being the next candidate — can be added as its own package
+without touching the routing, storage or Mattermost-facing code.
+
 ### Architecture
 
 ```text
@@ -240,7 +275,7 @@ downgrading messages to SMS.
                            │ paired session
                            │
                  ┌─────────▼─────────┐
-                 │    rcs-mm_gw      │
+                 │      msg-gw       │
                  │                   │
                  │     Go daemon     │
                  │                   │
@@ -305,7 +340,7 @@ updates, edits (if supported) and attachment correlation.
 **Incoming SMS/RCS**
 
 ```text
-Remote contact → Google Messages → libgm event → rcs-mm_gw
+Remote contact → Google Messages → libgm event → msg-gw
       → lookup conversation mapping → Mattermost thread
 ```
 
@@ -314,7 +349,7 @@ If no Mattermost thread exists yet, the bridge creates one and stores the mappin
 **Reply from Mattermost**
 
 ```text
-Mattermost user → reply in mapped thread → Mattermost event → rcs-mm_gw
+Mattermost user → reply in mapped thread → Mattermost event → msg-gw
       → lookup Google conversation ID → libgm.SendMessage(...)
       → Google Messages / RCS → recipient
 ```
@@ -361,18 +396,22 @@ src/
     │   ├── bridge.go  routing.go  conversations.go
     │   ├── inbound.go  outbound.go  delivery.go
     │
-    └── storage/                SQLite mappings
-        ├── sqlite.go  conversations.go  messages.go
+    └── storage/                SQLite and PostgreSQL mappings
+        ├── db.go  sqlite.go  postgres.go
+        ├── conversations.go  messages.go
 ```
 
-The daemon stays deliberately small: no PostgreSQL, Redis, Kafka or RabbitMQ. SQLite is
-sufficient for the expected message volume and mapping requirements, and the driver is
-`modernc.org/sqlite` so the binary stays static.
+`internal/storage` is written against `database/sql` and `?` placeholders only, with a small
+rebind step for PostgreSQL's numbered placeholders, so `conversations.go` and `messages.go`
+are shared unchanged between backends — see [Storage backend](#storage-backend-is-a-choice-not-a-fixture).
+SQLite remains the default and the one exercised against real message volume; the driver is
+`modernc.org/sqlite`, so the binary stays static even without PostgreSQL.
 
 Everything that knows about the Google Messages protocol lives in `internal/gmessages`, and
 everything about Mattermost in `internal/mattermost`; neither imports the other. When Google
 changes the protocol — the project's main maintenance risk — the damage is contained to one
-package.
+package. The same isolation is what makes future transports (Facebook Messenger) additive
+rather than invasive.
 
 ### Persistent state
 
@@ -394,6 +433,9 @@ CREATE TABLE messages (
 );
 ```
 
+The same schema is created on both the SQLite and PostgreSQL backends; each keeps its own
+schema-version bookkeeping, so switching backends starts from empty rather than migrating.
+
 Later additions: RCS delivery state, attachment metadata, reactions, reply relationships and
 sender identity in group conversations.
 
@@ -402,16 +444,14 @@ sender identity in group conversations.
 The daemon pairs with Google Messages the same way Google Messages for Web or any other
 linked device does; the user approves the pairing from Google Messages on the phone. Session
 credentials are then persisted so normal operation needs no repeated interactive
-authentication, with restrictive filesystem permissions (and ideally optional support for an
-external secret store later).
-
-Planned command structure:
+authentication, with restrictive filesystem permissions and optional support for an external
+secret store (Vault).
 
 ```text
-rcs-mm_gw pair
-rcs-mm_gw daemon
-rcs-mm_gw status
-rcs-mm_gw logout
+msg-gw pair
+msg-gw daemon
+msg-gw status
+msg-gw logout
 ```
 
 ### Deployment
@@ -421,11 +461,11 @@ Linux host
 │
 ├── Mattermost
 │
-└── rcs-mm_gw
+└── msg-gw
        │
-       ├── persistent state
+       ├── persistent state       /var/lib/msggw
        ├── Google Messages session
-       └── SQLite database
+       └── SQLite or PostgreSQL database
 ```
 
 The Android phone does not need to be on the same LAN. It only needs Google Messages, working
@@ -438,11 +478,12 @@ SMS/RCS service, Internet connectivity, and a valid paired-device relationship.
    session handling, breaking the bridge until `libgm` catches up. This is the primary
    maintenance risk.
 2. **RCS is Google-Messages dependent** — if the phone stops using Google Messages as its
-   messaging client, the solution may stop working.
+   messaging client, that transport stops working; this does not affect other transports as
+   they are added.
 3. **Session revocation** — Google can unlink paired sessions, so the daemon needs
    session-health detection, clear logs, a `status` command and easy re-pairing.
 4. **Duplicate messages** — reconnects and event replay can repeat events; deduplicate on the
-   Google Messages message ID before posting to Mattermost.
+   source message ID before posting to Mattermost.
 5. **Mattermost loop prevention** — the bridge must ignore its own bot user ID,
    delivery-status posts and system-generated posts.
 6. **Group RCS** — group chats add senders, display names, sender IDs, group titles and member
@@ -450,6 +491,9 @@ SMS/RCS service, Internet connectivity, and a valid paired-device relationship.
 7. **Licensing** — `mautrix/gmessages` / `libgm` is **AGPL-3.0**, which is why this project is
    also licensed under AGPL-3.0-or-later; the implications must still be reviewed before
    offering the bridge as a network service to third parties.
+8. **Multi-platform scope creep** — each additional transport (Facebook Messenger, and any
+   others down the line) brings its own protocol risk and maintenance burden; transports are
+   added one at a time, each with its own isolated package, rather than speculatively.
 
 ### MVP phases
 
@@ -461,9 +505,13 @@ Do not start with full SMS/MMS/RCS parity — build the smallest vertical slice 
 | 2 | **Receive one message** — Google Messages event → stdout/log | An incoming SMS or RCS message is logged with conversation ID, message ID, sender, body and type |
 | 3 | **Mattermost posting** — add the Mattermost bot integration | An incoming RCS message appears in Mattermost |
 | 4 | **Mattermost reply** — map thread back to conversation, `libgm.SendMessage()` | A reply typed in Mattermost arrives on the remote phone as RCS |
-| 5 | **Persistence** — SQLite mappings, deduplication, restart-safe mappings, reconnect handling | Mappings survive restarts, no duplicate posts |
+| 5 | **Persistence** — storage mappings, deduplication, restart-safe mappings, reconnect handling | Mappings survive restarts, no duplicate posts |
 | 6 | **Media** — inbound/outbound attachments, MIME handling, file uploads both ways | Images cross the bridge in both directions |
 | 7 | **Message semantics** — delivery state, reactions, replies/quoting, read state, typing indicators, group conversations | Richer RCS features are reflected in Mattermost |
+
+Facebook Messenger (and any further transport) is deliberately **not** on this list: it is
+planned as a follow-on phase, added once the Google Messages transport is proven against a
+real phone.
 
 ### First milestone
 
@@ -490,7 +538,7 @@ The trade-off is explicit and accepted:
 | Document | Contents |
 |----------|----------|
 | [docs/SOLUTION.md](docs/SOLUTION.md) | Full design document (authoritative) |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference: routing, secrets, every key |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference: routing, storage backends, secrets, every key |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features and target releases |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Release history |
 | [docs/TODO.md](docs/TODO.md) | Pending tasks |
@@ -503,8 +551,8 @@ The trade-off is explicit and accepted:
 This project is released under the **GNU Affero General Public License v3.0 or later** — see
 [LICENSE](LICENSE).
 
-Note that `libgm` (from `mautrix/gmessages`), the intended Google Messages client library, is
-also distributed under **AGPL-3.0**; see [Risks and caveats](#risks-and-caveats).
+Note that `libgm` (from `mautrix/gmessages`), the Google Messages client library, is also
+distributed under **AGPL-3.0**; see [Risks and caveats](#risks-and-caveats).
 
 ---
 
@@ -512,4 +560,4 @@ also distributed under **AGPL-3.0**; see [Risks and caveats](#risks-and-caveats)
 
 J.F. Gratton — <jean-francois@famillegratton.net>
 
-Repository: <https://git.famillegratton.net:3000/mainline/rcs_gateway.git>
+Repository: <https://git.famillegratton.net:3000/mainline/msggw.git>
