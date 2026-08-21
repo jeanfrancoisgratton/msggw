@@ -54,3 +54,6 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Fri Aug 21 2026 Binary package builder <builder@famillegratton.net> 0.0.1-1
+- initial stub
+
