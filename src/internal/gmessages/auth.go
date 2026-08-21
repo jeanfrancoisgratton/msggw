@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:48:12
 // Original filename: src/internal/gmessages/auth.go
@@ -13,12 +13,12 @@ import (
 
 	"go.mau.fi/mautrix-gmessages/pkg/libgm"
 
-	"rcs_gateway/internal/secrets"
+	"msggw/internal/secrets"
 )
 
 // ErrNotPaired is returned when the daemon is asked to connect but no session
 // has been stored yet.
-var ErrNotPaired = errors.New("not paired with Google Messages: run \"rcs-mm_gw pair\" first")
+var ErrNotPaired = errors.New("not paired with Google Messages: run \"msg-gw pair\" first")
 
 // session is what gets persisted between runs. It is versioned because
 // libgm's AuthData is a reverse-engineered structure that changes with the
@@ -74,7 +74,7 @@ func (s *SessionStore) Load() (*libgm.AuthData, error) {
 			s.store.Describe(), err)
 	}
 	if sess.Version != sessionVersion {
-		return nil, fmt.Errorf("session in %s is version %d, this build reads version %d: re-pair with \"rcs-mm_gw pair\"",
+		return nil, fmt.Errorf("session in %s is version %d, this build reads version %d: re-pair with \"msg-gw pair\"",
 			s.store.Describe(), sess.Version, sessionVersion)
 	}
 

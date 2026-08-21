@@ -1,6 +1,6 @@
 {
-  "state_dir": "/var/lib/rcs_gateway",
-  "database": "rcs_gateway.db",
+  "state_dir": "/var/lib/msggw",
+  "database": "msggw.db",
 
   "log": {
     "level": "info",
@@ -13,7 +13,7 @@
   },
 
   "gmessages": {
-    "session_ref": "encoded:/var/lib/rcs_gateway/gmessages.session.enc",
+    "session_ref": "encoded:/var/lib/msggw/gmessages.session.enc",
     "ping_interval_seconds": 60,
     "force_rcs": true,
     "mark_read_on_bridge": false,
@@ -22,7 +22,7 @@
 
   "mattermost": {
     "url": "https://mattermost.example.net",
-    "token_ref": "file:/etc/rcs_gateway/mattermost.token",
+    "token_ref": "file:/etc/msggw/mattermost.token",
     "insecure_skip_verify": false,
     "reconnect_backoff_seconds": 5,
     "request_timeout_seconds": 30

@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:45:42
 // Original filename: src/internal/storage/conversations.go

@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:45:06
 // Original filename: src/internal/storage/sqlite.go
@@ -139,7 +139,7 @@ func (db *DB) migrateSQLite(ctx context.Context) error {
 		return fmt.Errorf("reading schema version: %w", err)
 	}
 	if current > len(sqliteMigrations) {
-		return fmt.Errorf("database is at schema version %d, this build only knows up to %d: it was written by a newer rcs-mm_gw",
+		return fmt.Errorf("database is at schema version %d, this build only knows up to %d: it was written by a newer msg-gw",
 			current, schemaVersion)
 	}
 

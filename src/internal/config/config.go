@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:44:03
 // Original filename: src/internal/config/config.go
@@ -23,7 +23,7 @@ import (
 )
 
 // DefaultPath is where the daemon looks when no --config is given.
-const DefaultPath = "/etc/rcs_gateway/config.json"
+const DefaultPath = "/etc/msggw/config.json"
 
 // UserPath is the per-user fallback, used when DefaultPath does not exist.
 // It lets the daemon run unprivileged without an /etc entry.
@@ -32,7 +32,7 @@ func UserPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "rcs_gateway", "config.json")
+	return filepath.Join(dir, "msggw", "config.json")
 }
 
 // Load reads the configuration from path, applies defaults and validates it.
@@ -85,14 +85,14 @@ func (c *Config) Path() string { return c.path }
 
 func (c *Config) applyDefaults() {
 	if c.StateDir == "" {
-		c.StateDir = "/var/lib/rcs_gateway"
+		c.StateDir = "/var/lib/msggw"
 	}
 	if c.DatabaseDriver == "" {
 		c.DatabaseDriver = DatabaseDriverSQLite
 	}
 	if c.DatabaseDriver == DatabaseDriverSQLite {
 		if c.Database == "" {
-			c.Database = "rcs_gateway.db"
+			c.Database = "msggw.db"
 		}
 		if !filepath.IsAbs(c.Database) {
 			c.Database = filepath.Join(c.StateDir, c.Database)

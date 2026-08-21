@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:09:41
 // Original filename: src/cmd/status.go
@@ -16,8 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rcs_gateway/internal/config"
-	"rcs_gateway/internal/gmessages"
+	"msggw/internal/config"
+	"msggw/internal/gmessages"
 )
 
 var statusOffline bool
@@ -66,7 +66,7 @@ func reportSession(ctx context.Context, out io.Writer, cfg *config.Config, log *
 
 	client, err := gmessages.New(gmCfg)
 	if errors.Is(err, gmessages.ErrNotPaired) {
-		fmt.Fprintf(out, "                 NOT PAIRED — run \"rcs-mm_gw pair\"\n")
+		fmt.Fprintf(out, "                 NOT PAIRED — run \"msg-gw pair\"\n")
 		return
 	}
 	if err != nil {

@@ -1,4 +1,4 @@
-module msg-gw
+module msggw
 
 go 1.26.6
 

@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:08:04
 // Original filename: src/cmd/root.go
@@ -18,10 +18,10 @@ var configPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "rcs-mm_gw",
+	Use:     "msg-gw",
 	Short:   "Google Messages (SMS/MMS/RCS) to Mattermost gateway",
 	Version: "1.0.0-1 (2026.08.16), Go version = " + runtime.Version(),
-	Long: `rcs-mm_gw bridges the SMS, MMS and RCS conversations of an Android phone
+	Long: `msg-gw bridges the SMS, MMS and RCS conversations of an Android phone
 running Google Messages into a Mattermost server, and sends replies typed in
 Mattermost back out through Google Messages.
 
@@ -30,11 +30,11 @@ it carries real RCS traffic rather than downgrading messages to SMS.
 
 Getting started:
 
-  rcs-mm_gw config sample > /etc/rcs_gateway/config.json
-  $EDITOR /etc/rcs_gateway/config.json
-  rcs-mm_gw config check
-  rcs-mm_gw pair
-  rcs-mm_gw daemon`,
+  msg-gw config sample > /etc/msggw/config.json
+  $EDITOR /etc/msggw/config.json
+  msg-gw config check
+  msg-gw pair
+  msg-gw daemon`,
 }
 
 func Execute() {
@@ -49,7 +49,7 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "",
-		"configuration file (default /etc/rcs_gateway/config.json, then $XDG_CONFIG_HOME/rcs_gateway/config.json)")
+		"configuration file (default /etc/msggw/config.json, then $XDG_CONFIG_HOME/msggw/config.json)")
 
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(configCmd)

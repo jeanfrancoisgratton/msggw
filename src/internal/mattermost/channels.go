@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:03:06
 // Original filename: src/internal/mattermost/channels.go
@@ -12,7 +12,7 @@ import (
 
 	"github.com/mattermost/mattermost/server/public/model"
 
-	"rcs_gateway/internal/config"
+	"msggw/internal/config"
 )
 
 // ResolveDestination turns a configured destination into a channel ID the

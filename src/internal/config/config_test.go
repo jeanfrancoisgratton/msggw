@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:10:51
 // Original filename: src/internal/config/config_test.go
@@ -53,12 +53,12 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if cfg.StateDir != "/var/lib/rcs_gateway" {
+	if cfg.StateDir != "/var/lib/msggw" {
 		t.Errorf("StateDir = %q, want the documented default", cfg.StateDir)
 	}
 	// A relative database name has to end up inside the state directory, or
 	// the daemon writes it into whatever directory it was started from.
-	if want := "/var/lib/rcs_gateway/rcs_gateway.db"; cfg.Database != want {
+	if want := "/var/lib/msggw/msggw.db"; cfg.Database != want {
 		t.Errorf("Database = %q, want %q", cfg.Database, want)
 	}
 	if !cfg.ThreadPerConversationEnabled() {

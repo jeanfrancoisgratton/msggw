@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:05:43
 // Original filename: src/internal/bridge/bridge.go
@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"rcs_gateway/internal/config"
-	"rcs_gateway/internal/gmessages"
-	"rcs_gateway/internal/mattermost"
-	"rcs_gateway/internal/storage"
+	"msggw/internal/config"
+	"msggw/internal/gmessages"
+	"msggw/internal/mattermost"
+	"msggw/internal/storage"
 )
 
 // pendingOutboundTTL is how long a sent-but-unacknowledged message keeps its
@@ -135,7 +135,7 @@ func (b *Bridge) handleGMEvent(ctx context.Context, evt gmessages.Event) error {
 	case gmessages.LoggedOutEvent:
 		// Nothing the daemon does can recover this; it needs a human and a new
 		// pairing. Saying so plainly beats reconnect attempts that cannot work.
-		return fmt.Errorf("the Google Messages session ended: %s — run \"rcs-mm_gw pair\" again", e.Reason)
+		return fmt.Errorf("the Google Messages session ended: %s — run \"msg-gw pair\" again", e.Reason)
 
 	case gmessages.ConnectionEvent:
 		b.logConnection(e)

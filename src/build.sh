@@ -2,7 +2,7 @@
 
 set -eu
 
-BINARY=rcs-mm_gw
+BINARY=msg-gw
 OUTPUT="/opt/sbin"
 DRY_RUN=false
 

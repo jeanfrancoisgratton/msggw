@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:09:12
 // Original filename: src/cmd/daemon.go
@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rcs_gateway/internal/bridge"
-	"rcs_gateway/internal/gmessages"
+	"msggw/internal/bridge"
+	"msggw/internal/gmessages"
 )
 
 var daemonCmd = &cobra.Command{
@@ -33,7 +33,7 @@ so the next start does not need to re-pair.`,
 			return err
 		}
 		log := newLogger(cfg)
-		log.Info("starting rcs-mm_gw", "config", cfg.Path(), "state_dir", cfg.StateDir)
+		log.Info("starting msg-gw", "config", cfg.Path(), "state_dir", cfg.StateDir)
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

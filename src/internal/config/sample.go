@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:44:09
 // Original filename: src/internal/config/sample.go
@@ -11,5 +11,5 @@ import _ "embed"
 var sample string
 
 // Sample returns a commented-by-example configuration file, for
-// "rcs-mm_gw config sample > /etc/rcs_gateway/config.json".
+// "msg-gw config sample > /etc/msggw/config.json".
 func Sample() string { return sample }

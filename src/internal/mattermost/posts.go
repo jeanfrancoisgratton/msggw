@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:03:20
 // Original filename: src/internal/mattermost/posts.go
@@ -16,7 +16,7 @@ import (
 // ID already prevents loops, but the property also lets an operator find
 // bridged posts, and lets a future release recognise its own posts after the
 // bot account is changed.
-const PropBridge = "rcs_gateway"
+const PropBridge = "msggw"
 
 // NewPost is a post to create.
 type NewPost struct {

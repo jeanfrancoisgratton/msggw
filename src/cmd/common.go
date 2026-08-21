@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:08:16
 // Original filename: src/cmd/common.go
@@ -11,11 +11,11 @@ import (
 	"log/slog"
 	"os"
 
-	"rcs_gateway/internal/config"
-	"rcs_gateway/internal/gmessages"
-	"rcs_gateway/internal/mattermost"
-	"rcs_gateway/internal/secrets"
-	"rcs_gateway/internal/storage"
+	"msggw/internal/config"
+	"msggw/internal/gmessages"
+	"msggw/internal/mattermost"
+	"msggw/internal/secrets"
+	"msggw/internal/storage"
 )
 
 // loadConfig reads the configuration named by --config, or the default paths.

@@ -1,11 +1,11 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:43:27
 // Original filename: src/internal/config/types.go
 
 package config
 
-import "rcs_gateway/internal/secrets"
+import "msggw/internal/secrets"
 
 // Destination kinds. Where a conversation ends up in Mattermost is entirely an
 // operator decision, so the daemon supports every shape Mattermost offers

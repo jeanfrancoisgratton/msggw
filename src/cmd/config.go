@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:08:41
 // Original filename: src/cmd/config.go
@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rcs_gateway/internal/config"
-	"rcs_gateway/internal/secrets"
+	"msggw/internal/config"
+	"msggw/internal/secrets"
 )
 
 var configCmd = &cobra.Command{
@@ -25,7 +25,7 @@ var configSampleCmd = &cobra.Command{
 	Short: "Print a sample configuration file",
 	Long: `Print a sample configuration file on standard output.
 
-  rcs-mm_gw config sample > /etc/rcs_gateway/config.json`,
+  msg-gw config sample > /etc/msggw/config.json`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, err := fmt.Fprint(cmd.OutOrStdout(), config.Sample())
@@ -105,7 +105,7 @@ func checkSecret(cmd *cobra.Command, label, ref string, cfg *config.Config, must
 			fmt.Fprintf(out, "%-18s: %s — EMPTY\n", label, store.Describe())
 			return fmt.Errorf("%s is empty", label)
 		}
-		fmt.Fprintf(out, "%-18s: %s — not stored yet, run \"rcs-mm_gw pair\"\n", label, store.Describe())
+		fmt.Fprintf(out, "%-18s: %s — not stored yet, run \"msg-gw pair\"\n", label, store.Describe())
 		return nil
 	default:
 		fmt.Fprintf(out, "%-18s: %s — UNREADABLE: %v\n", label, store.Describe(), err)

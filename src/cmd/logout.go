@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:09:52
 // Original filename: src/cmd/logout.go
@@ -13,7 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"rcs_gateway/internal/gmessages"
+	"msggw/internal/gmessages"
 )
 
 var logoutLocalOnly bool

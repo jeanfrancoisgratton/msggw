@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:09:01
 // Original filename: src/cmd/pair.go
@@ -17,7 +17,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 
-	"rcs_gateway/internal/gmessages"
+	"msggw/internal/gmessages"
 )
 
 var (
@@ -117,7 +117,7 @@ func verifyPairing(ctx context.Context, out io.Writer, pairing *gmessages.Pairin
 		fmt.Fprintf(out, "  ... and %d more\n", len(conversations)-shown)
 	}
 
-	fmt.Fprintln(out, "\nPairing complete. Start the bridge with \"rcs-mm_gw daemon\".")
+	fmt.Fprintln(out, "\nPairing complete. Start the bridge with \"msg-gw daemon\".")
 	return nil
 }
 

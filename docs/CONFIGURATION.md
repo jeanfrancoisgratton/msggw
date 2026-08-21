@@ -1,17 +1,17 @@
 # Configuration
 
-`rcs-mm_gw` reads a single JSON file. It looks for it in this order:
+`msg-gw` reads a single JSON file. It looks for it in this order:
 
 1. the path given to `--config` / `-c`;
-2. `/etc/rcs_gateway/config.json`;
-3. `$XDG_CONFIG_HOME/rcs_gateway/config.json` (usually `~/.config/rcs_gateway/config.json`).
+2. `/etc/msggw/config.json`;
+3. `$XDG_CONFIG_HOME/msggw/config.json` (usually `~/.config/msggw/config.json`).
 
 Print a starting point and check it:
 
 ```bash
-rcs-mm_gw config sample > /etc/rcs_gateway/config.json
-$EDITOR /etc/rcs_gateway/config.json
-rcs-mm_gw config check
+msg-gw config sample > /etc/msggw/config.json
+$EDITOR /etc/msggw/config.json
+msg-gw config check
 ```
 
 `config check` validates the file **and** resolves every secret it refers to,
@@ -49,10 +49,10 @@ them is a **reference** of the form `<scheme>:<location>`:
 | Reference | Meaning | Writable |
 |---|---|:--:|
 | `env:MM_BOT_TOKEN` | environment variable | no |
-| `file:/etc/rcs_gateway/mm.token` | plain file, must be mode `0600` or tighter | yes |
-| `encoded:/var/lib/rcs_gateway/session.enc` | file encoded with `helperFunctions` (empty passphrase) | yes |
+| `file:/etc/msggw/mm.token` | plain file, must be mode `0600` or tighter | yes |
+| `encoded:/var/lib/msggw/session.enc` | file encoded with `helperFunctions` (empty passphrase) | yes |
 | `encoded:/path/to/file#PASSPHRASE_VAR` | same, with the passphrase read from `$PASSPHRASE_VAR` | yes |
-| `vault:secrets/rcs_gateway#bot_token` | HashiCorp Vault KV, via `vaultLib` | yes |
+| `vault:secrets/msggw#bot_token` | HashiCorp Vault KV, via `vaultLib` | yes |
 | `literal:xoxb-...` | inline in the config file | no |
 
 A reference with no recognised scheme is an error. That is deliberate: a bare
@@ -81,14 +81,14 @@ truncated session behind.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `state_dir` | string | `/var/lib/rcs_gateway` | Everything persisted that is not a secret. |
+| `state_dir` | string | `/var/lib/msggw` | Everything persisted that is not a secret. |
 | `database_driver` | `sqlite` \| `postgres` | `sqlite` | Which storage backend to use. |
-| `database` | string | `rcs_gateway.db` | SQLite file, used only when `database_driver` is `sqlite`. A relative path resolves inside `state_dir`. |
+| `database` | string | `msggw.db` | SQLite file, used only when `database_driver` is `sqlite`. A relative path resolves inside `state_dir`. |
 | `database_dsn_ref` | secret reference | — | PostgreSQL DSN, used only when `database_driver` is `postgres`. **Required** in that case. |
 
 ### Storage backend
 
-`rcs-mm_gw` keeps its bridge state — which Mattermost thread stands for which
+`msg-gw` keeps its bridge state — which Mattermost thread stands for which
 Google Messages conversation, and which post stands for which message — in a
 SQL database. Two backends are supported:
 
@@ -107,11 +107,11 @@ given as a [secret reference](#secret-references), not a plain string:
 
 ```json
 "database_driver": "postgres",
-"database_dsn_ref": "vault:secrets/rcs_gateway#database_dsn"
+"database_dsn_ref": "vault:secrets/msggw#database_dsn"
 ```
 
 The resolved value is the DSN itself, e.g.
-`postgres://user:pass@host:5432/rcs_gateway?sslmode=disable`. `database_dsn_ref`
+`postgres://user:pass@host:5432/msggw?sslmode=disable`. `database_dsn_ref`
 does not need to be writable — unlike `gmessages.session_ref` — since the
 daemon never rewrites it.
 
@@ -145,8 +145,8 @@ variables.
 | `timeout_seconds` | int | Vault HTTP timeout |
 
 A `vault:` reference is written `vault:<mount>/<path>#<field>`, where `<mount>`
-is the KV mount name. For a secret reachable at `secrets/data/rcs_gateway`, the
-mount is `secrets` and the path is `rcs_gateway`.
+is the KV mount name. For a secret reachable at `secrets/data/msggw`, the
+mount is `secrets` and the path is `msggw`.
 
 ---
 

@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:06:11
 // Original filename: src/internal/bridge/conversations.go
@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"rcs_gateway/internal/gmessages"
-	"rcs_gateway/internal/mattermost"
-	"rcs_gateway/internal/storage"
+	"msggw/internal/gmessages"
+	"msggw/internal/mattermost"
+	"msggw/internal/storage"
 )
 
 // ensureConversation returns the Mattermost side of a Google Messages

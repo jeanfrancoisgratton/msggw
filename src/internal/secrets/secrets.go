@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 19:42:07
 // Original filename: src/internal/secrets/secrets.go
@@ -12,10 +12,10 @@
 // value, written as "<scheme>:<location>":
 //
 //	env:MM_BOT_TOKEN                      environment variable (read-only)
-//	file:/etc/rcs_gateway/mm.token        plain file, must be mode 0600 or tighter
-//	encoded:/etc/rcs_gateway/mm.token.enc file encoded with helperFunctions
+//	file:/etc/msggw/mm.token        plain file, must be mode 0600 or tighter
+//	encoded:/etc/msggw/mm.token.enc file encoded with helperFunctions
 //	encoded:/path/to/file#PASSPHRASE_VAR  ... with the passphrase in $PASSPHRASE_VAR
-//	vault:secrets/rcs_gateway#bot_token   HashiCorp Vault KV, via vaultLib
+//	vault:secrets/msggw#bot_token   HashiCorp Vault KV, via vaultLib
 //	literal:xoxb-not-a-real-token         inline in the config file (discouraged)
 //
 // A reference with no recognised scheme is rejected rather than guessed at, so

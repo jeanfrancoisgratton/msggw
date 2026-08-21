@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:11:42
 // Original filename: src/internal/bridge/routing_test.go
@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"rcs_gateway/internal/config"
-	"rcs_gateway/internal/gmessages"
+	"msggw/internal/config"
+	"msggw/internal/gmessages"
 )
 
 var defaultDest = config.Destination{Type: config.DestChannel, Team: "team", Channel: "messages"}

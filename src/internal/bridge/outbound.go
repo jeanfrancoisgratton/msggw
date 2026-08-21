@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:07:21
 // Original filename: src/internal/bridge/outbound.go
@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"strings"
 
-	"rcs_gateway/internal/gmessages"
-	"rcs_gateway/internal/mattermost"
-	"rcs_gateway/internal/storage"
+	"msggw/internal/gmessages"
+	"msggw/internal/mattermost"
+	"msggw/internal/storage"
 )
 
 // handleOutgoingPost sends a Mattermost post to the phone.

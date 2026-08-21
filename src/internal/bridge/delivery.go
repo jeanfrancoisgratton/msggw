@@ -1,4 +1,4 @@
-// rcs_gateway
+// msggw
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 // Original timestamp: 2026.08.16 20:07:42
 // Original filename: src/internal/bridge/delivery.go
@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 
-	"rcs_gateway/internal/gmessages"
-	"rcs_gateway/internal/storage"
+	"msggw/internal/gmessages"
+	"msggw/internal/storage"
 )
 
 // Delivery state is shown as a reaction on the post. A reaction is the least
