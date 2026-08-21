@@ -5,7 +5,7 @@
 %define _version 0.0.1
 %define _rel 1
 %define _arch x86_64
-%define _binaryname msg-gw
+%define _binaryname message-gateway
 
 Name:       msggw
 Version:    %{_version}

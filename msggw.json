@@ -1,6 +1,6 @@
 {
   "softwarename": "msggw",
-  "binaryname": "msg-gw",
+  "binaryname": "message-gateway",
   "goversion": "1.27.0",
   "versionnumber": "0.0.1",
   "releasenumber": "1",

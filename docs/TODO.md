@@ -15,7 +15,7 @@
 ## Implemented, needs a live phone to confirm
 
 - [ ] Phase 1 — pair, persist the session, reconnect, list conversations
-      (`msg-gw pair` verifies this itself, but it has not been run against a
+      (`message-gateway pair` verifies this itself, but it has not been run against a
       real phone).
 - [ ] Phase 2 — receive a message and log it.
 - [ ] Phase 3 — post an incoming RCS message to Mattermost.

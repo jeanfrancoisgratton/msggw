@@ -2,7 +2,7 @@
 # Packager: Package builder <builder@famillegratton.net>
 pkgname=msggw
 pkgver=0.0.1
-pkgrel=1
+pkgrel=2
 pkgdir=/data/packages
 pkgdesc="Messages <-> Mattermost bridge"
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
@@ -13,7 +13,7 @@ install="$pkgname.pre-install $pkgname.post-install $pkgname.pre-upgrade $pkgnam
 #source="$pkgname-$pkgver-$pkgrel.tar.bz2::http://localhost/$pkgname-$pkgver-$pkgrel.tar.bz2"
 builddir="$startdir/src/BUILD"
 
-binaryname=msg-gw
+binaryname=message-gateway
 
 prepare() {
 	mkdir -p "$builddir"

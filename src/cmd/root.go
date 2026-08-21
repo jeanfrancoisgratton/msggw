@@ -18,10 +18,10 @@ var configPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "msg-gw",
+	Use:     "message-gateway",
 	Short:   "Google Messages (SMS/MMS/RCS) to Mattermost gateway",
-	Version: "1.0.0-1 (2026.08.16), Go version = " + runtime.Version(),
-	Long: `msg-gw bridges the SMS, MMS and RCS conversations of an Android phone
+	Version: "0.0.1-1 (2026.08.21), Go version = " + runtime.Version(),
+	Long: `message-gateway bridges the SMS, MMS and RCS conversations of an Android phone
 running Google Messages into a Mattermost server, and sends replies typed in
 Mattermost back out through Google Messages.
 
@@ -30,11 +30,11 @@ it carries real RCS traffic rather than downgrading messages to SMS.
 
 Getting started:
 
-  msg-gw config sample > /etc/msggw/config.json
+  message-gateway config sample > /etc/msggw/config.json
   $EDITOR /etc/msggw/config.json
-  msg-gw config check
-  msg-gw pair
-  msg-gw daemon`,
+  message-gateway config check
+  message-gateway pair
+  message-gateway daemon`,
 }
 
 func Execute() {

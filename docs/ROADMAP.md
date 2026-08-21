@@ -3,8 +3,8 @@
 ## Current version
 
 ```bash
-# msg-gw -v
-msg-gw version 1.0.0-1 (2026.08.16)
+# message-gateway -v
+message-gateway version 1.0.0-1 (2026.08.16)
 ```
 
 ## MVP phases
@@ -15,7 +15,7 @@ phone; it does not mean it has been run against real hardware.
 
 | Phase | Feature | Slated for | Status | Comments |
 |---|---|---|---|---|
-| 1 | Pairing, session persistence, reconnect, list conversations | 1.0.0 | written | `msg-gw pair` shows a QR code, stores the session, reconnects with it and prints the conversation list as its own success check |
+| 1 | Pairing, session persistence, reconnect, list conversations | 1.0.0 | written | `message-gateway pair` shows a QR code, stores the session, reconnects with it and prints the conversation list as its own success check |
 | 2 | Receive a message and log it | 1.0.0 | written | `internal/gmessages` translates libgm events into a small neutral vocabulary |
 | 3 | Post an incoming message to Mattermost | 1.0.0 | written | bot account over REST; routing decides the destination |
 | 4 | Send a Mattermost reply back over RCS | 1.0.0 | written | WebSocket listener, thread → conversation lookup, `libgm.SendMessage` |

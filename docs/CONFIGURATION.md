@@ -1,6 +1,6 @@
 # Configuration
 
-`msg-gw` reads a single JSON file. It looks for it in this order:
+`message-gateway` reads a single JSON file. It looks for it in this order:
 
 1. the path given to `--config` / `-c`;
 2. `/etc/msggw/config.json`;
@@ -9,9 +9,9 @@
 Print a starting point and check it:
 
 ```bash
-msg-gw config sample > /etc/msggw/config.json
+message-gateway config sample > /etc/msggw/config.json
 $EDITOR /etc/msggw/config.json
-msg-gw config check
+message-gateway config check
 ```
 
 `config check` validates the file **and** resolves every secret it refers to,
@@ -88,7 +88,7 @@ truncated session behind.
 
 ### Storage backend
 
-`msg-gw` keeps its bridge state — which Mattermost thread stands for which
+`message-gateway` keeps its bridge state — which Mattermost thread stands for which
 Google Messages conversation, and which post stands for which message — in a
 SQL database. Two backends are supported:
 
