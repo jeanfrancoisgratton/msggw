@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/msggw_banner.png" alt="Messaging ↔ Mattermost Gateway" width="100%">
+  <img src="images/rcs_gateway_banner.png" alt="Messaging ↔ Mattermost Gateway" width="100%">
 </p>
 
 # msggw
