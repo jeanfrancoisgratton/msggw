@@ -270,3 +270,72 @@ func TestVaultTokenRefMayNotBeCircular(t *testing.T) {
 		t.Errorf("the error does not name the offending setting: %v", err)
 	}
 }
+
+// TestVaultAddressMayNotBeCircular mirrors TestVaultTokenRefMayNotBeCircular
+// for vault.address: reaching Vault to resolve its own address is impossible.
+func TestVaultAddressMayNotBeCircular(t *testing.T) {
+	store, err := Open("vault:mount/path#field", VaultConfig{
+		Address: "vault:mount/other#address",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := store.Load(); err == nil {
+		t.Fatal("a circular Vault address reference was accepted")
+	} else if !strings.Contains(err.Error(), "vault.address") {
+		t.Errorf("the error does not name the offending setting: %v", err)
+	}
+}
+
+func TestLooksLikeReference(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"env:TOKEN", true},
+		{"file:/etc/msggw/token", true},
+		{"encoded:/var/lib/msggw/session.enc", true},
+		{"vault:secrets/msggw#token", true},
+		{"literal:xoxb-not-a-real-token", true},
+		{"https://mattermost.example.net", false},
+		{"/var/lib/msggw/msggw.db", false},
+		{"msggw.db", false},
+		{"jfgratton", false},
+		{"", false},
+		{"carrier-pigeon:/tmp/x", false},
+	}
+	for _, tc := range tests {
+		if got := LooksLikeReference(tc.value); got != tc.want {
+			t.Errorf("LooksLikeReference(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestMaybeResolve(t *testing.T) {
+	t.Run("plain value passes through unchanged", func(t *testing.T) {
+		got, err := MaybeResolve("https://mattermost.example.net", VaultConfig{})
+		if err != nil {
+			t.Fatalf("MaybeResolve: %v", err)
+		}
+		if got != "https://mattermost.example.net" {
+			t.Errorf("MaybeResolve = %q, want the value unchanged", got)
+		}
+	})
+
+	t.Run("a reference is resolved", func(t *testing.T) {
+		t.Setenv("RCS_TEST_URL", "https://mattermost.example.net")
+		got, err := MaybeResolve("env:RCS_TEST_URL", VaultConfig{})
+		if err != nil {
+			t.Fatalf("MaybeResolve: %v", err)
+		}
+		if got != "https://mattermost.example.net" {
+			t.Errorf("MaybeResolve = %q, want the resolved value", got)
+		}
+	})
+
+	t.Run("an unresolvable reference still errors", func(t *testing.T) {
+		if _, err := MaybeResolve("env:RCS_TEST_DEFINITELY_UNSET", VaultConfig{}); err == nil {
+			t.Error("MaybeResolve on a missing env var succeeded, want an error")
+		}
+	})
+}

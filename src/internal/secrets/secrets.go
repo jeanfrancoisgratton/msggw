@@ -97,6 +97,33 @@ func OpenString(ref string, vaultCfg VaultConfig) (string, error) {
 	return strings.TrimSpace(string(value)), nil
 }
 
+// LooksLikeReference reports whether value's prefix, up to the first ':',
+// names one of the recognised schemes. It lets a field that is usually a
+// plain value — a URL, a filesystem path, a Mattermost username — also be
+// sourced from Vault, a file or the environment, without requiring every
+// plain value to be wrapped in "literal:".
+func LooksLikeReference(value string) bool {
+	scheme, _, ok := strings.Cut(value, ":")
+	if !ok {
+		return false
+	}
+	switch scheme {
+	case schemeEnv, schemeFile, schemeEncoded, schemeVault, schemeLiteral:
+		return true
+	default:
+		return false
+	}
+}
+
+// MaybeResolve resolves value through OpenString when it looks like a
+// reference, and returns it unchanged otherwise.
+func MaybeResolve(value string, vaultCfg VaultConfig) (string, error) {
+	if !LooksLikeReference(value) {
+		return value, nil
+	}
+	return OpenString(value, vaultCfg)
+}
+
 // isBase64 reports whether b is valid standard base64. helperFunctions'
 // DecodeString panics on malformed input instead of returning an error, so
 // encodedFileStore checks the encoding itself before handing anything over.

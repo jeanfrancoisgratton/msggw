@@ -161,12 +161,20 @@ type vaultStore struct {
 // reference machinery so that it too can live outside the config file. A
 // vault: token reference would be circular and is rejected.
 func (s *vaultStore) resolve() (kv.Config, error) {
+	address := s.cfg.Address
+	if strings.HasPrefix(address, schemeVault+":") {
+		return kv.Config{}, errors.New("vault.address may not itself be a vault: reference")
+	}
+	address, err := MaybeResolve(address, VaultConfig{})
+	if err != nil {
+		return kv.Config{}, fmt.Errorf("reading Vault address: %w", err)
+	}
+
 	var token string
 	if s.cfg.TokenRef != "" {
 		if strings.HasPrefix(s.cfg.TokenRef, schemeVault+":") {
 			return kv.Config{}, errors.New("vault.token_ref may not itself be a vault: reference")
 		}
-		var err error
 		token, err = OpenString(s.cfg.TokenRef, VaultConfig{})
 		if err != nil {
 			return kv.Config{}, fmt.Errorf("reading Vault token: %w", err)
@@ -174,7 +182,9 @@ func (s *vaultStore) resolve() (kv.Config, error) {
 	}
 	// An empty token is left to vaultLib, which falls back to VAULT_TOKEN and
 	// then to ~/.vault-token.
-	return s.cfg.toShared(s.mount, token), nil
+	cfg := s.cfg.toShared(s.mount, token)
+	cfg.Address = address
+	return cfg, nil
 }
 
 func (s *vaultStore) Load() ([]byte, error) {

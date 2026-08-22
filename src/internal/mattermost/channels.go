@@ -13,6 +13,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 
 	"msggw/internal/config"
+	"msggw/internal/secrets"
 )
 
 // ResolveDestination turns a configured destination into a channel ID the
@@ -50,6 +51,11 @@ func (c *Client) ResolveDestination(ctx context.Context, dest config.Destination
 }
 
 func (c *Client) resolve(ctx context.Context, dest config.Destination) (string, error) {
+	dest, err := c.resolveDestinationRefs(dest)
+	if err != nil {
+		return "", err
+	}
+
 	switch dest.Type {
 	case config.DestChannelID:
 		channel, _, err := c.api.GetChannel(ctx, dest.ChannelID)
@@ -98,6 +104,41 @@ func (c *Client) resolve(ctx context.Context, dest config.Destination) (string, 
 	default:
 		return "", fmt.Errorf("unknown destination type %q", dest.Type)
 	}
+}
+
+// resolveDestinationRefs resolves any of dest's fields that are given as a
+// secret reference rather than a plain value, e.g. a team or username kept
+// out of the config file behind a vault: reference.
+func resolveDestinationRefs(dest config.Destination, vaultCfg secrets.VaultConfig) (config.Destination, error) {
+	var err error
+	if dest.Team, err = secrets.MaybeResolve(dest.Team, vaultCfg); err != nil {
+		return dest, fmt.Errorf("destination team: %w", err)
+	}
+	if dest.Channel, err = secrets.MaybeResolve(dest.Channel, vaultCfg); err != nil {
+		return dest, fmt.Errorf("destination channel: %w", err)
+	}
+	if dest.ChannelID, err = secrets.MaybeResolve(dest.ChannelID, vaultCfg); err != nil {
+		return dest, fmt.Errorf("destination channel_id: %w", err)
+	}
+	if dest.User, err = secrets.MaybeResolve(dest.User, vaultCfg); err != nil {
+		return dest, fmt.Errorf("destination user: %w", err)
+	}
+	if len(dest.Users) > 0 {
+		// dest.Users shares its backing array with the caller's config, so it
+		// is resolved into a fresh slice rather than mutated in place.
+		users := make([]string, len(dest.Users))
+		for i, username := range dest.Users {
+			if users[i], err = secrets.MaybeResolve(username, vaultCfg); err != nil {
+				return dest, fmt.Errorf("destination users[%d]: %w", i, err)
+			}
+		}
+		dest.Users = users
+	}
+	return dest, nil
+}
+
+func (c *Client) resolveDestinationRefs(dest config.Destination) (config.Destination, error) {
+	return resolveDestinationRefs(dest, c.cfg.Vault)
 }
 
 // ensureMember makes sure the bot can post in a channel.

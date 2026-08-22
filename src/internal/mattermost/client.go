@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
+
+	"msggw/internal/secrets"
 )
 
 // Config is what a Client needs to exist.
@@ -41,7 +43,11 @@ type Config struct {
 	// JoinChannels lets the daemon add the bot to a channel it is not a member
 	// of, instead of failing to post there.
 	JoinChannels bool
-	Logger       *slog.Logger
+	// Vault is used to resolve any routing destination field (team, channel,
+	// user, ...) that is given as a secret reference rather than a plain
+	// value.
+	Vault  secrets.VaultConfig
+	Logger *slog.Logger
 }
 
 // Client is a connected Mattermost bot.
