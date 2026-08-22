@@ -8,19 +8,16 @@
 
 `msggw` is a small self-hosted Go daemon (`msg-gw`) that surfaces SMS, MMS and — most
 importantly — **RCS** conversations from an Android phone inside a Mattermost server, and lets
-you reply to them straight from Mattermost. It started life as `rcs_gateway`, focused purely on
-RCS; the project has since been renamed because the goal is broader: one gateway bridging
-several messaging platforms into Mattermost, with Facebook Messenger planned as a future
-addition.
+you reply to them straight from Mattermost. It started life as `rcs_gateway`.
 
 ```text
-Android phone / Google Messages          Facebook Messenger (planned)
-            ⇅                                        ⇅
-      SMS / MMS / RCS                                 ⇅
-            ⇅                                         ⇅
-                       msggw bridge daemon
-                              ⇅
-                          Mattermost
+Android phone / Google Messages
+              ⇅
+        SMS / MMS / RCS
+              ⇅
+      msggw bridge daemon
+              ⇅
+          Mattermost
 ```
 
 ---

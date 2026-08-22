@@ -1,5 +1,6 @@
 {
   "state_dir": "/var/lib/msggw",
+  "database_driver": "sqlite",
   "database": "msggw.db",
 
   "log": {
