@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"msggw/internal/secrets"
 )
 
 // DefaultPath is where the daemon looks when no --config is given.
@@ -96,7 +98,10 @@ func (c *Config) applyDefaults() {
 	if c.Backend.SQLite.Path == "" {
 		c.Backend.SQLite.Path = "msggw.db"
 	}
-	if !filepath.IsAbs(c.Backend.SQLite.Path) {
+	// A reference (vault:, file:, ...) is left alone here: it has to be
+	// resolved before we can tell whether the result is relative, which
+	// SQLitePath does at the point of use.
+	if !secrets.LooksLikeReference(c.Backend.SQLite.Path) && !filepath.IsAbs(c.Backend.SQLite.Path) {
 		c.Backend.SQLite.Path = filepath.Join(c.StateDir, c.Backend.SQLite.Path)
 	}
 	if c.Log.Level == "" {
@@ -145,7 +150,10 @@ func (c *Config) Validate() error {
 
 	if c.Mattermost.URL == "" {
 		problems = append(problems, errors.New("mattermost.url is required"))
-	} else if !strings.HasPrefix(c.Mattermost.URL, "http://") && !strings.HasPrefix(c.Mattermost.URL, "https://") {
+	} else if !secrets.LooksLikeReference(c.Mattermost.URL) &&
+		!strings.HasPrefix(c.Mattermost.URL, "http://") && !strings.HasPrefix(c.Mattermost.URL, "https://") {
+		// A reference's resolved shape can't be checked without I/O, which
+		// Load does not do; MattermostURL re-checks this after resolving.
 		problems = append(problems, fmt.Errorf("mattermost.url %q must start with http:// or https://", c.Mattermost.URL))
 	}
 	if c.Mattermost.TokenRef == "" {
@@ -252,6 +260,34 @@ func (r Rule) validate() error {
 // ThreadPerConversationEnabled reads the tri-state flag after defaults.
 func (c *Config) ThreadPerConversationEnabled() bool {
 	return c.Routing.ThreadPerConversation == nil || *c.Routing.ThreadPerConversation
+}
+
+// SQLitePath resolves backend.sqlite.path — which may be a plain path or a
+// secret reference — and, if the result is relative, joins it under
+// StateDir. Reaching out to Vault, a file or the environment means this does
+// I/O, unlike everything in this package's Load path.
+func (c *Config) SQLitePath() (string, error) {
+	path, err := secrets.MaybeResolve(c.Backend.SQLite.Path, c.Vault)
+	if err != nil {
+		return "", fmt.Errorf("backend.sqlite.path: %w", err)
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(c.StateDir, path)
+	}
+	return path, nil
+}
+
+// MattermostURL resolves mattermost.url — which may be a plain URL or a
+// secret reference — and checks that the resolved value is still a URL.
+func (c *Config) MattermostURL() (string, error) {
+	url, err := secrets.MaybeResolve(c.Mattermost.URL, c.Vault)
+	if err != nil {
+		return "", fmt.Errorf("mattermost.url: %w", err)
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return "", fmt.Errorf("mattermost.url resolved to %q, which must start with http:// or https://", url)
+	}
+	return url, nil
 }
 
 // RequestTimeout is the per-REST-call bound.

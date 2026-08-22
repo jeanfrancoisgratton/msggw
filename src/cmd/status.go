@@ -103,7 +103,12 @@ func reportSession(ctx context.Context, out io.Writer, cfg *config.Config, log *
 }
 
 func reportMattermost(ctx context.Context, out io.Writer, cfg *config.Config, log *slog.Logger) {
-	fmt.Fprintf(out, "mattermost     : %s\n", cfg.Mattermost.URL)
+	url, err := cfg.MattermostURL()
+	if err != nil {
+		fmt.Fprintf(out, "mattermost     : MISCONFIGURED — %v\n", err)
+		return
+	}
+	fmt.Fprintf(out, "mattermost     : %s\n", url)
 	fmt.Fprintf(out, "                 default route %s\n", cfg.Routing.Default.String())
 
 	if statusOffline {
@@ -138,8 +143,10 @@ func reportMappings(ctx context.Context, out io.Writer, cfg *config.Config) erro
 
 	if cfg.Backend.Driver == config.DatabaseDriverPostgres {
 		fmt.Fprintf(out, "database       : postgres (%s)\n", cfg.Backend.Postgres.DSNRef)
+	} else if path, err := cfg.SQLitePath(); err != nil {
+		fmt.Fprintf(out, "database       : MISCONFIGURED — %v\n", err)
 	} else {
-		fmt.Fprintf(out, "database       : %s\n", cfg.Backend.SQLite.Path)
+		fmt.Fprintf(out, "database       : %s\n", path)
 	}
 	fmt.Fprintf(out, "                 %d conversations bridged, %d messages mapped\n",
 		len(conversations), messages)

@@ -2,7 +2,7 @@
   "softwarename": "msggw",
   "binaryname": "message-gateway",
   "goversion": "1.27.0",
-  "versionnumber": "0.2.0",
+  "versionnumber": "0.4.0",
   "releasenumber": "1",
   "description": "Messages <-> Mattermost bridge",
   "maintainer": "J.F. Gratton <jean-francois@famillegratton.net>",

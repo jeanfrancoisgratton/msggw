@@ -53,17 +53,28 @@ could be read.`,
 		fmt.Fprintf(out, "configuration : %s\n", cfg.Path())
 		fmt.Fprintf(out, "state dir     : %s\n", cfg.StateDir)
 		fmt.Fprintf(out, "db driver     : %s\n", cfg.Backend.Driver)
+
+		var problems []error
+
 		if cfg.Backend.Driver == config.DatabaseDriverPostgres {
 			fmt.Fprintf(out, "database      : (see backend.postgres.dsn_ref below)\n")
+		} else if path, err := cfg.SQLitePath(); err != nil {
+			fmt.Fprintf(out, "database      : BAD REFERENCE — %v\n", err)
+			problems = append(problems, err)
 		} else {
-			fmt.Fprintf(out, "database      : %s\n", cfg.Backend.SQLite.Path)
+			fmt.Fprintf(out, "database      : %s\n", path)
 		}
-		fmt.Fprintf(out, "mattermost    : %s\n", cfg.Mattermost.URL)
+
+		if url, err := cfg.MattermostURL(); err != nil {
+			fmt.Fprintf(out, "mattermost    : BAD REFERENCE — %v\n", err)
+			problems = append(problems, err)
+		} else {
+			fmt.Fprintf(out, "mattermost    : %s\n", url)
+		}
+
 		fmt.Fprintf(out, "default route : %s\n", cfg.Routing.Default.String())
 		fmt.Fprintf(out, "routing rules : %d\n", len(cfg.Routing.Rules))
 		fmt.Fprintf(out, "threads       : %v\n", cfg.ThreadPerConversationEnabled())
-
-		var problems []error
 
 		fmt.Fprintln(out)
 		problems = append(problems, checkSecret(cmd, "mattermost token", cfg.Mattermost.TokenRef, cfg, true))

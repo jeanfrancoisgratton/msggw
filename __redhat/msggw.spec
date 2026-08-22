@@ -2,7 +2,7 @@
 %define _build_id_links none
 %define _name msggw
 %define _prefix /opt
-%define _version 0.2.0
+%define _version 0.4.0
 %define _rel 1
 %define _arch x86_64
 %define _binaryname message-gateway
@@ -54,6 +54,19 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.2.0-1
+- version bump
+- feature(config): config file now supports multiple backends
+- chore: updated sample file so it reflects the availability of a new PGSQL backend
+- feat: removing mentions of FB messenger support; Meta makes it too hard to support
+- chore: changed the binary name being built
+- bug(ARCHBUILDER): fixed cleanup steps in Makefile
+- APKBUILDER: renamed pre/post scripts
+- completed tool rebranding
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- go version bump: 1.26.6 -> 1.27.0
+- chore: update changelog for 0.0.1-1
+
 * Fri Aug 21 2026 Binary package builder <builder@famillegratton.net> 0.0.1-1
 - initial stub
 

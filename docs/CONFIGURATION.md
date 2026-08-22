@@ -59,6 +59,17 @@ A reference with no recognised scheme is an error. That is deliberate: a bare
 string would otherwise be indistinguishable from a token accidentally pasted
 into a world-readable file.
 
+**Four settings are always a reference**, because they hold a credential:
+`gmessages.session_ref`, `mattermost.token_ref`, `backend.postgres.dsn_ref`
+and `vault.token_ref`. Elsewhere, a reference is optional: `backend.sqlite.path`,
+`mattermost.url`, `vault.address`, and every routing [destination](#destinations)
+field (`team`, `channel`, `channel_id`, `user`, `users`) normally take a plain
+value, but also accept a reference for an operator who wants the value —
+sensitive or not — kept out of the config file too. A plain value works
+exactly as before: it is only treated as a reference when its prefix, up to
+the first `:`, matches one of the schemes above (so a `https://...` URL, an
+ordinary filesystem path, or a bare username all pass through untouched).
+
 **Writability matters for one setting only.** `gmessages.session_ref` has to be
 writable, because `libgm` refreshes its Google auth token roughly hourly and the
 refreshed session must be persisted; a session behind `env:` or `literal:` would
@@ -94,7 +105,7 @@ SQL database. Two backends are supported, chosen and configured through the
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `backend.driver` | `sqlite` \| `postgres` | `sqlite` | Which storage backend to use. |
-| `backend.sqlite.path` | string | `msggw.db` | SQLite file, read only when `backend.driver` is `sqlite`. A relative path resolves inside `state_dir`. |
+| `backend.sqlite.path` | string or [secret reference](#secret-references) | `msggw.db` | SQLite file, read only when `backend.driver` is `sqlite`. A relative path resolves inside `state_dir`. |
 | `backend.postgres.dsn_ref` | secret reference | — | PostgreSQL DSN, read only when `backend.driver` is `postgres`. **Required** in that case. |
 
 Both `backend.sqlite` and `backend.postgres` may be filled in at the same
@@ -174,7 +185,7 @@ variables.
 
 | Key | Type | Meaning |
 |---|---|---|
-| `address` | string | `VAULT_ADDR` |
+| `address` | string or [secret reference](#secret-references) | Falls back to `VAULT_ADDR`. May **not** itself be a `vault:` reference. |
 | `token_ref` | secret reference | The Vault token. May **not** itself be a `vault:` reference. |
 | `namespace` | string | Vault Enterprise namespace |
 | `ca_cert_path`, `client_cert_path`, `client_key_path` | string | TLS material |
@@ -203,7 +214,7 @@ mount is `secrets` and the path is `msggw`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `url` | string | — | **Required.** Server root, e.g. `https://mattermost.example.net`. |
+| `url` | string or [secret reference](#secret-references) | — | **Required.** Server root, e.g. `https://mattermost.example.net`. |
 | `token_ref` | secret reference | — | **Required.** The bot account's personal access token. |
 | `insecure_skip_verify` | bool | `false` | Only for a self-signed certificate outside the host trust store. |
 | `reconnect_backoff_seconds` | int | `5` | Initial WebSocket retry delay; doubles up to one minute. |
@@ -247,6 +258,9 @@ the layout is hard-coded.
 - `direct` — the direct-message channel between the bot and one user. This is
   the "everything shows up in my DMs with the bot" layout.
 - `group` — a group direct message between the bot and 2–7 users.
+
+`team`, `channel`, `channel_id`, `user` and each entry of `users` accept a
+[secret reference](#secret-references) in place of a plain value.
 
 ### Rules
 

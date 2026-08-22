@@ -59,14 +59,19 @@ func newMattermost(ctx context.Context, cfg *config.Config, log *slog.Logger) (*
 	if err != nil {
 		return nil, fmt.Errorf("mattermost.token_ref: %w", err)
 	}
+	url, err := cfg.MattermostURL()
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := mattermost.New(mattermost.Config{
-		URL:                cfg.Mattermost.URL,
+		URL:                url,
 		Token:              token,
 		InsecureSkipVerify: cfg.Mattermost.InsecureSkipVerify,
 		RequestTimeout:     cfg.RequestTimeout(),
 		ReconnectBackoff:   cfg.ReconnectBackoff(),
 		JoinChannels:       cfg.Routing.JoinChannels,
+		Vault:              cfg.Vault,
 		Logger:             log,
 	})
 	if err != nil {
@@ -88,5 +93,9 @@ func openStorage(ctx context.Context, cfg *config.Config) (*storage.DB, error) {
 		}
 		return storage.OpenPostgres(ctx, dsn)
 	}
-	return storage.Open(ctx, cfg.Backend.SQLite.Path)
+	path, err := cfg.SQLitePath()
+	if err != nil {
+		return nil, err
+	}
+	return storage.Open(ctx, path)
 }

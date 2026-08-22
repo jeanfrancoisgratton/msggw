@@ -217,6 +217,86 @@ func TestUnknownDatabaseDriverIsRejected(t *testing.T) {
 	}
 }
 
+// TestSQLitePathResolvesReference covers backend.sqlite.path given as a
+// secret reference: applyDefaults must leave it alone (it cannot tell
+// whether a resolved reference will turn out relative), and SQLitePath must
+// resolve it and then apply the usual StateDir join.
+func TestSQLitePathResolvesReference(t *testing.T) {
+	t.Setenv("SQLITE_PATH", "sqlite/from-env.db")
+	body := strings.Replace(minimalConfig, `"gmessages"`,
+		`"backend": {"sqlite": {"path": "env:SQLITE_PATH"}}, "gmessages"`, 1)
+
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Backend.SQLite.Path != "env:SQLITE_PATH" {
+		t.Errorf("Backend.SQLite.Path = %q, want the reference left untouched by Load", cfg.Backend.SQLite.Path)
+	}
+
+	path, err := cfg.SQLitePath()
+	if err != nil {
+		t.Fatalf("SQLitePath: %v", err)
+	}
+	if want := "/var/lib/msggw/sqlite/from-env.db"; path != want {
+		t.Errorf("SQLitePath() = %q, want %q", path, want)
+	}
+}
+
+// TestSQLitePathPlainValueUnchanged guards the common case: Load still joins
+// a plain relative path under StateDir immediately, and SQLitePath is a
+// no-op on top of that.
+func TestSQLitePathPlainValueUnchanged(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimalConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	path, err := cfg.SQLitePath()
+	if err != nil {
+		t.Fatalf("SQLitePath: %v", err)
+	}
+	if want := "/var/lib/msggw/msggw.db"; path != want {
+		t.Errorf("SQLitePath() = %q, want %q", path, want)
+	}
+}
+
+// TestMattermostURLAcceptsReference covers the case Validate must let
+// through statically (it cannot check a reference's resolved shape without
+// I/O) and MattermostURL must check once it is resolved.
+func TestMattermostURLAcceptsReference(t *testing.T) {
+	t.Setenv("MM_URL", "https://mm.example.net")
+	body := strings.Replace(minimalConfig, `"url": "https://mm.example.net"`, `"url": "env:MM_URL"`, 1)
+
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	url, err := cfg.MattermostURL()
+	if err != nil {
+		t.Fatalf("MattermostURL: %v", err)
+	}
+	if want := "https://mm.example.net"; url != want {
+		t.Errorf("MattermostURL() = %q, want %q", url, want)
+	}
+}
+
+// TestMattermostURLRejectsBadResolvedValue covers a reference that resolves
+// to something that still is not a URL: the check Validate skipped for
+// references has to happen somewhere.
+func TestMattermostURLRejectsBadResolvedValue(t *testing.T) {
+	t.Setenv("MM_URL", "not-a-url")
+	body := strings.Replace(minimalConfig, `"url": "https://mm.example.net"`, `"url": "env:MM_URL"`, 1)
+
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := cfg.MattermostURL(); err == nil {
+		t.Error("MattermostURL() accepted a resolved value that is not a URL")
+	}
+}
+
 func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
 	body := `{
 	  "gmessages": {"session_ref": "file:/tmp/s"},
