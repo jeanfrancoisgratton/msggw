@@ -20,7 +20,7 @@ var configPath string
 var rootCmd = &cobra.Command{
 	Use:     "message-gateway",
 	Short:   "Google Messages (SMS/MMS/RCS) to Mattermost gateway",
-	Version: "0.0.1 (2026.08.21), Go version = " + runtime.Version(),
+	Version: "0.2.0 (2026.08.22), Go version = " + runtime.Version(),
 	Long: `message-gateway bridges the SMS, MMS and RCS conversations of an Android phone
 running Google Messages into a Mattermost server, and sends replies typed in
 Mattermost back out through Google Messages.
