@@ -1,7 +1,14 @@
 {
   "state_dir": "/var/lib/msggw",
-  "database_driver": "sqlite",
-  "database": "msggw.db",
+  "backend": {
+    "driver": "sqlite",
+    "sqlite": {
+      "path": "msggw.db"
+    },
+    "postgres": {
+      "dsn_ref": "vault:secrets/msggw#database_dsn"
+    }
+  },
 
   "log": {
     "level": "info",
@@ -14,7 +21,7 @@
   },
 
   "gmessages": {
-    "session_ref": "encoded:/var/lib/msggw/gmessages.session.enc",
+    "session_ref": "encoded:/data/gmessages/gmessages.session.enc",
     "ping_interval_seconds": 60,
     "force_rcs": true,
     "mark_read_on_bridge": false,

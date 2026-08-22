@@ -82,36 +82,73 @@ truncated session behind.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `state_dir` | string | `/var/lib/msggw` | Everything persisted that is not a secret. |
-| `database_driver` | `sqlite` \| `postgres` | `sqlite` | Which storage backend to use. |
-| `database` | string | `msggw.db` | SQLite file, used only when `database_driver` is `sqlite`. A relative path resolves inside `state_dir`. |
-| `database_dsn_ref` | secret reference | — | PostgreSQL DSN, used only when `database_driver` is `postgres`. **Required** in that case. |
+| `backend` | object | — | Storage backend selection and settings; see [Storage backend](#storage-backend). |
 
 ### Storage backend
 
 `message-gateway` keeps its bridge state — which Mattermost thread stands for which
 Google Messages conversation, and which post stands for which message — in a
-SQL database. Two backends are supported:
+SQL database. Two backends are supported, chosen and configured through the
+`backend` object:
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `backend.driver` | `sqlite` \| `postgres` | `sqlite` | Which storage backend to use. |
+| `backend.sqlite.path` | string | `msggw.db` | SQLite file, read only when `backend.driver` is `sqlite`. A relative path resolves inside `state_dir`. |
+| `backend.postgres.dsn_ref` | secret reference | — | PostgreSQL DSN, read only when `backend.driver` is `postgres`. **Required** in that case. |
+
+Both `backend.sqlite` and `backend.postgres` may be filled in at the same
+time — only the block named by `backend.driver` is ever read. This lets the
+sample configuration ship both blocks fully populated, so switching backends
+later is a one-line change to `backend.driver` rather than a round trip
+through this document to figure out what the other block needs.
 
 - **`sqlite`** (the default) — a single file under `state_dir`. This is what
   the daemon has actually been run against: the expected volume is one
   person's text messages, which SQLite handles comfortably.
 - **`postgres`** — for an operator who wants the state store on a separate
   server, under its own backup and HA story, rather than a file next to the
-  daemon.
+  daemon. Because the DSN is just an address, `postgres` is the natural choice
+  when the daemon itself runs somewhere ephemeral (a container that gets
+  recreated, an autoscaled host) and the database needs to outlive it —
+  there is no local file to lose.
 
 Switching backends does not migrate existing data: each keeps its own schema
-version. Pick one before first run.
+version. Make sure the backend you switch *to* is already provisioned (the
+Postgres database exists and is reachable, or the SQLite file is the one you
+expect) before flipping `backend.driver` — the daemon does not carry data
+across.
+
+**Persistence with `sqlite` is entirely the operator's responsibility.** The
+daemon does nothing beyond writing to `backend.sqlite.path`; there is no
+built-in backup or replication. In particular, if `message-gateway` runs in a
+container, `state_dir` sits in the container's writable layer by default and
+is lost whenever the container is recreated — mount `state_dir` (or at least
+the SQLite file's directory) onto a persistent volume from the host or
+whatever the container platform provides for durable storage. That volume
+must behave like a local filesystem: SQLite depends on OS-level file locking
+to stay correct with a single writer, and that locking is unreliable over
+network filesystems (NFS and some cluster/CSI volume backends in particular)
+— using one of those as the volume can corrupt the database under concurrent
+access. A local, host-backed volume is the safe choice.
 
 A PostgreSQL DSN contains a password, so — like `mattermost.token_ref` — it is
 given as a [secret reference](#secret-references), not a plain string:
 
 ```json
-"database_driver": "postgres",
-"database_dsn_ref": "vault:secrets/msggw#database_dsn"
+"backend": {
+  "driver": "postgres",
+  "sqlite": {
+    "path": "msggw.db"
+  },
+  "postgres": {
+    "dsn_ref": "vault:secrets/msggw#database_dsn"
+  }
+}
 ```
 
 The resolved value is the DSN itself, e.g.
-`postgres://user:pass@host:5432/msggw?sslmode=disable`. `database_dsn_ref`
+`postgres://user:pass@host:5432/msggw?sslmode=disable`. `backend.postgres.dsn_ref`
 does not need to be writable — unlike `gmessages.session_ref` — since the
 daemon never rewrites it.
 

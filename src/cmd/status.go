@@ -136,10 +136,10 @@ func reportMappings(ctx context.Context, out io.Writer, cfg *config.Config) erro
 		return err
 	}
 
-	if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
-		fmt.Fprintf(out, "database       : postgres (%s)\n", cfg.DatabaseDSNRef)
+	if cfg.Backend.Driver == config.DatabaseDriverPostgres {
+		fmt.Fprintf(out, "database       : postgres (%s)\n", cfg.Backend.Postgres.DSNRef)
 	} else {
-		fmt.Fprintf(out, "database       : %s\n", cfg.Database)
+		fmt.Fprintf(out, "database       : %s\n", cfg.Backend.SQLite.Path)
 	}
 	fmt.Fprintf(out, "                 %d conversations bridged, %d messages mapped\n",
 		len(conversations), messages)

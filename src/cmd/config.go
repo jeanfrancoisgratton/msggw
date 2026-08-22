@@ -52,11 +52,11 @@ could be read.`,
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "configuration : %s\n", cfg.Path())
 		fmt.Fprintf(out, "state dir     : %s\n", cfg.StateDir)
-		fmt.Fprintf(out, "db driver     : %s\n", cfg.DatabaseDriver)
-		if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
-			fmt.Fprintf(out, "database      : (see database_dsn_ref below)\n")
+		fmt.Fprintf(out, "db driver     : %s\n", cfg.Backend.Driver)
+		if cfg.Backend.Driver == config.DatabaseDriverPostgres {
+			fmt.Fprintf(out, "database      : (see backend.postgres.dsn_ref below)\n")
 		} else {
-			fmt.Fprintf(out, "database      : %s\n", cfg.Database)
+			fmt.Fprintf(out, "database      : %s\n", cfg.Backend.SQLite.Path)
 		}
 		fmt.Fprintf(out, "mattermost    : %s\n", cfg.Mattermost.URL)
 		fmt.Fprintf(out, "default route : %s\n", cfg.Routing.Default.String())
@@ -68,8 +68,8 @@ could be read.`,
 		fmt.Fprintln(out)
 		problems = append(problems, checkSecret(cmd, "mattermost token", cfg.Mattermost.TokenRef, cfg, true))
 		problems = append(problems, checkSecret(cmd, "gmessages session", cfg.GMessages.SessionRef, cfg, false))
-		if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
-			problems = append(problems, checkSecret(cmd, "database dsn", cfg.DatabaseDSNRef, cfg, true))
+		if cfg.Backend.Driver == config.DatabaseDriverPostgres {
+			problems = append(problems, checkSecret(cmd, "database dsn", cfg.Backend.Postgres.DSNRef, cfg, true))
 		}
 
 		for _, problem := range problems {

@@ -539,10 +539,13 @@ instead of reading the field directly — that's the standard Go answer to
 tri-state JSON booleans, and you'll recognise the pattern if you see it
 elsewhere.
 
-The storage-backend fields live here too (`DatabaseDriver`, `Database`,
-`DatabaseDSNRef` — `types.go:42-53`), and `Validate` (`config.go:124`) enforces
-that they're used consistently: a `database_dsn_ref` set while
-`database_driver` is `sqlite` is rejected as a mistake, not silently ignored.
+The storage-backend fields live here too, as a `BackendConfig` (`types.go:59`)
+holding `Driver` plus one nested block per backend, `SQLite` (`types.go:71`)
+and `Postgres` (`types.go:78`). Both blocks can be filled in at once — the
+sample ships both — and only the one `Driver` names is ever read; `Validate`
+(`config.go:124`) only checks that the *active* block is complete (e.g.
+`backend.postgres.dsn_ref` is required once `backend.driver` is `postgres`),
+not that the inactive one is empty.
 
 ### 4b. `internal/secrets`
 

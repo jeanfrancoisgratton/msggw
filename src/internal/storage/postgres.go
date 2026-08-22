@@ -3,7 +3,7 @@
 // Original timestamp: 2026.08.17 00:00:00
 // Original filename: src/internal/storage/postgres.go
 
-// PostgreSQL backend, selected by setting config.Config.DatabaseDriver to
+// PostgreSQL backend, selected by setting config.Config.Backend.Driver to
 // config.DatabaseDriverPostgres; see openStorage in src/cmd/common.go, which
 // picks between this and Open in sqlite.go.
 //

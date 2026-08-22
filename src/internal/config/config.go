@@ -87,16 +87,17 @@ func (c *Config) applyDefaults() {
 	if c.StateDir == "" {
 		c.StateDir = "/var/lib/msggw"
 	}
-	if c.DatabaseDriver == "" {
-		c.DatabaseDriver = DatabaseDriverSQLite
+	if c.Backend.Driver == "" {
+		c.Backend.Driver = DatabaseDriverSQLite
 	}
-	if c.DatabaseDriver == DatabaseDriverSQLite {
-		if c.Database == "" {
-			c.Database = "msggw.db"
-		}
-		if !filepath.IsAbs(c.Database) {
-			c.Database = filepath.Join(c.StateDir, c.Database)
-		}
+	// The SQLite path is defaulted unconditionally, not only when it is the
+	// active driver: both backend blocks are meant to be always ready to go,
+	// so switching Driver back to sqlite later must not find an empty path.
+	if c.Backend.SQLite.Path == "" {
+		c.Backend.SQLite.Path = "msggw.db"
+	}
+	if !filepath.IsAbs(c.Backend.SQLite.Path) {
+		c.Backend.SQLite.Path = filepath.Join(c.StateDir, c.Backend.SQLite.Path)
 	}
 	if c.Log.Level == "" {
 		c.Log.Level = "info"
@@ -121,18 +122,16 @@ func (c *Config) applyDefaults() {
 func (c *Config) Validate() error {
 	var problems []error
 
-	switch c.DatabaseDriver {
+	switch c.Backend.Driver {
 	case DatabaseDriverSQLite:
-		if c.DatabaseDSNRef != "" {
-			problems = append(problems, errors.New("database_dsn_ref is only used when database_driver is \"postgres\""))
-		}
+		// The postgres block, if present, is simply not read.
 	case DatabaseDriverPostgres:
-		if c.DatabaseDSNRef == "" {
-			problems = append(problems, errors.New("database_dsn_ref is required when database_driver is \"postgres\""))
+		if c.Backend.Postgres.DSNRef == "" {
+			problems = append(problems, errors.New("backend.postgres.dsn_ref is required when backend.driver is \"postgres\""))
 		}
 	default:
-		problems = append(problems, fmt.Errorf("database_driver %q must be %q or %q",
-			c.DatabaseDriver, DatabaseDriverSQLite, DatabaseDriverPostgres))
+		problems = append(problems, fmt.Errorf("backend.driver %q must be %q or %q",
+			c.Backend.Driver, DatabaseDriverSQLite, DatabaseDriverPostgres))
 	}
 
 	if c.GMessages.SessionRef == "" {

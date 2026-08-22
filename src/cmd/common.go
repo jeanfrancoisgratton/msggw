@@ -79,14 +79,14 @@ func newMattermost(ctx context.Context, cfg *config.Config, log *slog.Logger) (*
 }
 
 // openStorage opens the configured storage backend: SQLite by default, or
-// PostgreSQL when cfg.DatabaseDriver is set to config.DatabaseDriverPostgres.
+// PostgreSQL when cfg.Backend.Driver is set to config.DatabaseDriverPostgres.
 func openStorage(ctx context.Context, cfg *config.Config) (*storage.DB, error) {
-	if cfg.DatabaseDriver == config.DatabaseDriverPostgres {
-		dsn, err := secrets.OpenString(cfg.DatabaseDSNRef, cfg.Vault)
+	if cfg.Backend.Driver == config.DatabaseDriverPostgres {
+		dsn, err := secrets.OpenString(cfg.Backend.Postgres.DSNRef, cfg.Vault)
 		if err != nil {
-			return nil, fmt.Errorf("database_dsn_ref: %w", err)
+			return nil, fmt.Errorf("backend.postgres.dsn_ref: %w", err)
 		}
 		return storage.OpenPostgres(ctx, dsn)
 	}
-	return storage.Open(ctx, cfg.Database)
+	return storage.Open(ctx, cfg.Backend.SQLite.Path)
 }

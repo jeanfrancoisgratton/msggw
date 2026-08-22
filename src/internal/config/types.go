@@ -36,21 +36,11 @@ const (
 // Config is the whole daemon configuration, read from a JSON file.
 type Config struct {
 	// StateDir holds everything the daemon persists that is not a secret: the
-	// SQLite database (when DatabaseDriver is sqlite), and downloaded media
+	// SQLite database (when Backend.Driver is sqlite), and downloaded media
 	// while it is in flight.
 	StateDir string `json:"state_dir"`
-	// DatabaseDriver selects the storage backend: DatabaseDriverSQLite
-	// (default) or DatabaseDriverPostgres.
-	DatabaseDriver string `json:"database_driver,omitempty"`
-	// Database is the SQLite file, used only when DatabaseDriver is sqlite.
-	// Relative paths resolve inside StateDir.
-	Database string `json:"database,omitempty"`
-	// DatabaseDSNRef is a secret reference resolving to the PostgreSQL DSN
-	// (e.g. "postgres://user:pass@host:5432/dbname?sslmode=disable"), used
-	// only when DatabaseDriver is postgres. It is a reference rather than a
-	// plain string so the password does not sit in the config file, the same
-	// way mattermost.token_ref works.
-	DatabaseDSNRef string `json:"database_dsn_ref,omitempty"`
+	// Backend selects and configures the storage backend.
+	Backend BackendConfig `json:"backend,omitempty"`
 
 	Log        LogConfig           `json:"log"`
 	Vault      secrets.VaultConfig `json:"vault,omitempty"`
@@ -60,6 +50,37 @@ type Config struct {
 
 	// path records where this config was read from, for diagnostics.
 	path string
+}
+
+// BackendConfig selects the storage backend. Both the SQLite and Postgres
+// blocks may be filled in at the same time — only the one Driver names is
+// ever read, so an operator can switch backends by changing Driver alone,
+// without having to first go write the other block's settings.
+type BackendConfig struct {
+	// Driver selects the storage backend: DatabaseDriverSQLite (default) or
+	// DatabaseDriverPostgres.
+	Driver string `json:"driver,omitempty"`
+	// SQLite holds settings used only when Driver is sqlite.
+	SQLite SQLiteBackendConfig `json:"sqlite,omitempty"`
+	// Postgres holds settings used only when Driver is postgres.
+	Postgres PostgresBackendConfig `json:"postgres,omitempty"`
+}
+
+// SQLiteBackendConfig is consulted only when BackendConfig.Driver is
+// DatabaseDriverSQLite.
+type SQLiteBackendConfig struct {
+	// Path is the SQLite file. Relative paths resolve inside StateDir.
+	Path string `json:"path,omitempty"`
+}
+
+// PostgresBackendConfig is consulted only when BackendConfig.Driver is
+// DatabaseDriverPostgres.
+type PostgresBackendConfig struct {
+	// DSNRef is a secret reference resolving to the PostgreSQL DSN
+	// (e.g. "postgres://user:pass@host:5432/dbname?sslmode=disable"). It is
+	// a reference rather than a plain string so the password does not sit in
+	// the config file, the same way mattermost.token_ref works.
+	DSNRef string `json:"dsn_ref,omitempty"`
 }
 
 // LogConfig controls the daemon's own logging. libgm logs through zerolog and

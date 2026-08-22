@@ -58,8 +58,8 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 	// A relative database name has to end up inside the state directory, or
 	// the daemon writes it into whatever directory it was started from.
-	if want := "/var/lib/msggw/msggw.db"; cfg.Database != want {
-		t.Errorf("Database = %q, want %q", cfg.Database, want)
+	if want := "/var/lib/msggw/msggw.db"; cfg.Backend.SQLite.Path != want {
+		t.Errorf("Backend.SQLite.Path = %q, want %q", cfg.Backend.SQLite.Path, want)
 	}
 	if !cfg.ThreadPerConversationEnabled() {
 		t.Error("thread_per_conversation should default to on")
@@ -156,58 +156,63 @@ func TestDatabaseDriverDefaultsToSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.DatabaseDriver != DatabaseDriverSQLite {
-		t.Errorf("DatabaseDriver = %q, want %q", cfg.DatabaseDriver, DatabaseDriverSQLite)
+	if cfg.Backend.Driver != DatabaseDriverSQLite {
+		t.Errorf("Backend.Driver = %q, want %q", cfg.Backend.Driver, DatabaseDriverSQLite)
 	}
 }
 
 func TestPostgresDriverRequiresDSNRef(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_driver": "postgres", "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"gmessages"`, `"backend": {"driver": "postgres"}, "gmessages"`, 1)
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
-		t.Fatal("database_driver \"postgres\" without database_dsn_ref was accepted")
+		t.Fatal("backend.driver \"postgres\" without backend.postgres.dsn_ref was accepted")
 	}
-	if !strings.Contains(err.Error(), "database_dsn_ref") {
+	if !strings.Contains(err.Error(), "backend.postgres.dsn_ref") {
 		t.Errorf("the error does not name the missing field: %v", err)
 	}
 }
 
 func TestPostgresDriverIsAccepted(t *testing.T) {
 	body := strings.Replace(minimalConfig, `"gmessages"`,
-		`"database_driver": "postgres", "database_dsn_ref": "env:PG_DSN", "gmessages"`, 1)
+		`"backend": {"driver": "postgres", "postgres": {"dsn_ref": "env:PG_DSN"}}, "gmessages"`, 1)
 
 	cfg, err := Load(writeConfig(t, body))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	// A postgres config has no SQLite file to default or resolve inside
-	// state_dir; leaving it empty must not be treated as a mistake.
-	if cfg.Database != "" {
-		t.Errorf("Database = %q, want empty when database_driver is postgres", cfg.Database)
+	// Even though postgres is active, the SQLite block still gets its usual
+	// default: both blocks stay ready to go, so switching Driver back to
+	// sqlite later does not find an empty path.
+	if want := "/var/lib/msggw/msggw.db"; cfg.Backend.SQLite.Path != want {
+		t.Errorf("Backend.SQLite.Path = %q, want %q", cfg.Backend.SQLite.Path, want)
 	}
 }
 
-func TestSQLiteDriverRejectsDSNRef(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_dsn_ref": "env:PG_DSN", "gmessages"`, 1)
+// TestBothBackendBlocksCanCoexist covers the whole point of splitting the
+// backend into two nested blocks: an operator can leave both fully filled in
+// and switch storage backends by changing only backend.driver.
+func TestBothBackendBlocksCanCoexist(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"gmessages"`,
+		`"backend": {"driver": "sqlite", "sqlite": {"path": "msggw.db"}, "postgres": {"dsn_ref": "env:PG_DSN"}}, "gmessages"`, 1)
 
-	_, err := Load(writeConfig(t, body))
-	if err == nil {
-		t.Fatal("database_dsn_ref with the default sqlite driver was accepted")
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("a fully-populated postgres block alongside the active sqlite driver was rejected: %v", err)
 	}
-	if !strings.Contains(err.Error(), "database_dsn_ref") {
-		t.Errorf("the error does not name the offending field: %v", err)
+	if cfg.Backend.Postgres.DSNRef != "env:PG_DSN" {
+		t.Errorf("Backend.Postgres.DSNRef = %q, want it preserved even though sqlite is active", cfg.Backend.Postgres.DSNRef)
 	}
 }
 
 func TestUnknownDatabaseDriverIsRejected(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`, `"database_driver": "mysql", "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"gmessages"`, `"backend": {"driver": "mysql"}, "gmessages"`, 1)
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
-		t.Fatal("an unknown database_driver was accepted")
+		t.Fatal("an unknown backend.driver was accepted")
 	}
-	if !strings.Contains(err.Error(), "database_driver") {
+	if !strings.Contains(err.Error(), "backend.driver") {
 		t.Errorf("the error does not name the offending field: %v", err)
 	}
 }

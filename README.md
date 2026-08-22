@@ -164,13 +164,27 @@ postgres              for an operator who wants the state store on its own serve
 ```
 
 ```json
-"database_driver": "postgres",
-"database_dsn_ref": "vault:secrets/msggw#database_dsn"
+"backend": {
+  "driver": "sqlite",
+  "sqlite": {
+    "path": "msggw.db"
+  },
+  "postgres": {
+    "dsn_ref": "vault:secrets/msggw#database_dsn"
+  }
+}
 ```
 
-Switching backends does not migrate existing data — each keeps its own schema version, so pick
-one before first run. See [Storage backend](docs/CONFIGURATION.md#storage-backend) for the
-full picture.
+Both blocks can be filled in at once — only the one named by `driver` is read — so switching
+backends later is a one-line change. Switching does not migrate existing data, though: each
+backend keeps its own schema version, so make sure the one you switch to is already provisioned.
+
+`postgres` is the natural fit when the daemon itself runs somewhere ephemeral — a container that
+gets recreated, an autoscaled host — since the DSN just points at a server that outlives it.
+`sqlite` has no such story: it's a plain file, so persistence is on the operator. Running in a
+container means mounting `state_dir` onto a **local, host-backed** persistent volume — not a
+network filesystem, since SQLite's locking is unreliable over NFS and similar. See
+[Storage backend](docs/CONFIGURATION.md#storage-backend) for the full picture.
 
 ### Credentials are references, never values
 
@@ -188,7 +202,7 @@ literal:xoxb-...                    inline (discouraged)
 The Google Messages session must use a *writable* scheme — `file:`, `encoded:` or `vault:` —
 because `libgm` refreshes its auth token while running and the new one has to be persisted;
 otherwise every restart would need a re-pairing. The configuration rejects `env:` and
-`literal:` for that field. A PostgreSQL DSN (`database_dsn_ref`) does not need to be writable,
+`literal:` for that field. A PostgreSQL DSN (`backend.postgres.dsn_ref`) does not need to be writable,
 since the daemon never rewrites it.
 
 `msg-gw config check` resolves every reference and reports where each secret came from, without
