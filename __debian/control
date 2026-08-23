@@ -1,5 +1,5 @@
 Package: msggw
-Version: 0.5.0-1
+Version: 0.5.0-2
 Architecture: amd64
 Maintainer: J.F. Gratton <jean-francois@famillegratton.net>
 Description: Messages <-> Mattermost bridge
