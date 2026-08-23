@@ -66,6 +66,7 @@ reconnect without pairing again.`,
 		}
 
 		for attempt := 1; ; attempt++ {
+			log.Info("Google Messages pairing URL", "url", qr, "attempt", attempt, "max_attempts", pairAttempts)
 			showQR(out, qr, attempt, pairAttempts)
 
 			phoneID, err := pairing.Wait(ctx)

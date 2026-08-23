@@ -54,7 +54,8 @@ func OpenPostgres(ctx context.Context, dsn string) (*DB, error) {
 var postgresMigrations = []string{
 	`
 CREATE TABLE conversations (
-    gmessages_conversation_id TEXT PRIMARY KEY,
+    tenant                     TEXT NOT NULL DEFAULT '',
+    gmessages_conversation_id TEXT NOT NULL,
     mattermost_channel_id     TEXT NOT NULL,
     mattermost_root_post_id   TEXT NOT NULL DEFAULT '',
     display_name              TEXT NOT NULL DEFAULT '',
@@ -62,38 +63,44 @@ CREATE TABLE conversations (
     outgoing_participant_id   TEXT NOT NULL DEFAULT '',
     conversation_type         INTEGER NOT NULL DEFAULT 0,
     send_mode                 INTEGER NOT NULL DEFAULT 0,
-    last_seen                 INTEGER NOT NULL DEFAULT 0
+    last_seen                 INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (tenant, gmessages_conversation_id)
 );
 
 CREATE INDEX conversations_by_root_post ON conversations(mattermost_root_post_id);
 CREATE INDEX conversations_by_channel ON conversations(mattermost_channel_id);
 
 CREATE TABLE conversation_participants (
-    gmessages_conversation_id TEXT NOT NULL
-        REFERENCES conversations(gmessages_conversation_id) ON DELETE CASCADE,
+    tenant                     TEXT NOT NULL DEFAULT '',
+    gmessages_conversation_id TEXT NOT NULL,
     participant_id            TEXT NOT NULL,
     phone                     TEXT NOT NULL DEFAULT '',
     normalized_phone          TEXT NOT NULL DEFAULT '',
     display_name              TEXT NOT NULL DEFAULT '',
     is_me                     INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (gmessages_conversation_id, participant_id)
+    PRIMARY KEY (tenant, gmessages_conversation_id, participant_id),
+    FOREIGN KEY (tenant, gmessages_conversation_id)
+        REFERENCES conversations(tenant, gmessages_conversation_id) ON DELETE CASCADE
 );
 
-CREATE INDEX participants_by_phone ON conversation_participants(normalized_phone);
+CREATE INDEX participants_by_phone ON conversation_participants(tenant, normalized_phone);
 
 CREATE TABLE messages (
-    gmessages_message_id TEXT PRIMARY KEY,
+    tenant                TEXT NOT NULL DEFAULT '',
+    gmessages_message_id TEXT NOT NULL,
     mattermost_post_id   TEXT NOT NULL,
     conversation_id      TEXT NOT NULL,
     direction            TEXT NOT NULL,
     status               INTEGER NOT NULL DEFAULT 0,
-    created_at           INTEGER NOT NULL DEFAULT 0
+    created_at           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (tenant, gmessages_message_id)
 );
 
 CREATE INDEX messages_by_post ON messages(mattermost_post_id);
 CREATE INDEX messages_by_conversation ON messages(conversation_id);
 
 CREATE TABLE outbound_pending (
+    tenant             TEXT NOT NULL DEFAULT '',
     tmp_id             TEXT PRIMARY KEY,
     mattermost_post_id TEXT NOT NULL,
     conversation_id    TEXT NOT NULL,

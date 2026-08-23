@@ -76,7 +76,7 @@ func (db *DB) SaveConversation(ctx context.Context, conv Conversation) error {
 			display_name, is_group, outgoing_participant_id, conversation_type,
 			send_mode, last_seen
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(gmessages_conversation_id) DO UPDATE SET
+		ON CONFLICT(tenant, gmessages_conversation_id) DO UPDATE SET
 			mattermost_channel_id   = excluded.mattermost_channel_id,
 			mattermost_root_post_id = excluded.mattermost_root_post_id,
 			display_name            = excluded.display_name,

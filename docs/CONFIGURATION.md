@@ -31,6 +31,7 @@ than a silently-applied default.
 - [`log`](#log)
 - [`vault`](#vault)
 - [`gmessages`](#gmessages)
+- [Pairing](#pairing)
 - [`mattermost`](#mattermost)
 - [`routing`](#routing)
   - [Destinations](#destinations)
@@ -207,6 +208,54 @@ mount is `secrets` and the path is `msggw`.
 | `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
 | `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
 | `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged. `0` disables backfill. |
+
+---
+
+## Pairing
+
+Pairing itself is not a config setting — it is a separate, one-time step:
+
+```bash
+message-gateway pair
+```
+
+This shows a QR code, scanned in Google Messages on the phone (**Settings →
+Device pairing → QR code scanner**). Add `--print-url` for a terminal that
+cannot render the QR code; `--attempts` controls how many codes (each valid
+30 seconds) are shown before giving up. On success, the session is written to
+`gmessages.session_ref`, and `message-gateway daemon` needs no further
+interactive step to use it.
+
+**Checking whether pairing has already happened** — a session at
+`gmessages.session_ref` *is* the pairing state; there is no separate flag.
+`message-gateway status` reads only that reference and reports `NOT PAIRED —
+run "msg-gw pair"` or `paired with phone <id>` (`--offline` skips the network
+round-trip that confirms Google still honours the session). Equivalently,
+checking for a non-empty file (or secret) at that reference works directly —
+an empty file counts as "not paired," the same as a missing one (this is what
+`message-gateway logout --local-only` leaves behind).
+
+**Restarting does not re-trigger pairing.** `daemon` loads the stored session
+on startup and reconnects with it; it never launches the QR flow itself. As
+long as `gmessages.session_ref` sits on storage that survives a restart — the
+same volume-mount caveat as [`backend.sqlite.path`](#storage-backend) — a
+restarted container reconnects silently.
+
+**Pairing in an unattended container.** If no session exists yet, `daemon`
+does not fail immediately: it retries for 5 attempts, 60 seconds apart
+(logging a `warn` line each time), before giving up for good — a four-minute
+window to pair from a separate step:
+
+```bash
+docker exec -it msggw message-gateway pair
+docker logs -f msggw
+```
+
+The pairing URL itself is also logged, at `info`, once per QR code shown
+(including refreshed ones) — specifically so it is visible through `docker
+logs` even without an interactive terminal attached to `pair`. It is a
+short-lived (~30 second) bearer credential, so treat wherever your logs end
+up with the same care as any other secret in transit.
 
 ---
 

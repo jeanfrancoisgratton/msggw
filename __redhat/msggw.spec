@@ -2,7 +2,7 @@
 %define _build_id_links none
 %define _name msggw
 %define _prefix /opt
-%define _version 0.4.0
+%define _version 0.5.0
 %define _rel 1
 %define _arch x86_64
 %define _binaryname message-gateway
@@ -54,6 +54,12 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.4.0-1
+- Merge branch 'develop'
+- Version bump
+- feat(config): configuration now resolves various URI schemes
+- chore: update changelog for 0.2.0-1
+
 * Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.2.0-1
 - version bump
 - feature(config): config file now supports multiple backends

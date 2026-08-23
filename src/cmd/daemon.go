@@ -7,14 +7,25 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"msggw/internal/bridge"
 	"msggw/internal/gmessages"
+)
+
+// When the daemon starts before "msg-gw pair" has ever been run, it retries
+// instead of failing outright, so a container that starts the daemon and the
+// pairing command separately has a window to pair before the daemon gives up.
+const (
+	unpairedStartupRetries  = 5
+	unpairedStartupInterval = 60 * time.Second
 )
 
 var daemonCmd = &cobra.Command{
@@ -53,7 +64,7 @@ so the next start does not need to re-pair.`,
 		if err != nil {
 			return err
 		}
-		gm, err := gmessages.New(gmCfg)
+		gm, err := newGMessagesClientWithRetry(ctx, log, gmCfg)
 		if err != nil {
 			return err
 		}
@@ -84,4 +95,29 @@ so the next start does not need to re-pair.`,
 
 		return br.Run(ctx)
 	},
+}
+
+// newGMessagesClientWithRetry builds the Google Messages client, retrying
+// while no session has been paired yet. This gives an operator who starts the
+// daemon and "msg-gw pair" as separate steps (e.g. two container commands) a
+// window to pair before the daemon gives up for good.
+func newGMessagesClientWithRetry(ctx context.Context, log *slog.Logger, gmCfg gmessages.Config) (*gmessages.Client, error) {
+	for attempt := 1; ; attempt++ {
+		gm, err := gmessages.New(gmCfg)
+		if err == nil {
+			return gm, nil
+		}
+		if !errors.Is(err, gmessages.ErrNotPaired) || attempt >= unpairedStartupRetries {
+			return nil, err
+		}
+
+		log.Warn("not paired with Google Messages yet, will retry",
+			"attempt", attempt, "max_attempts", unpairedStartupRetries, "retry_in", unpairedStartupInterval)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(unpairedStartupInterval):
+		}
+	}
 }

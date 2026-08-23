@@ -434,20 +434,20 @@ standard "one root command, several subcommands" CLI (`config`, `pair`, `daemon`
 `init()` automatically before `main`, which is how Cobra's whole command tree
 gets assembled without a central list.
 
-The `daemon` command (`cmd/daemon.go:20`) is the one that runs the loop from
+The `daemon` command (`cmd/daemon.go:31`) is the one that runs the loop from
 section 2. Read it top to bottom; it's the canonical wiring sequence:
 
 ```go
-// cmd/daemon.go:30 (trimmed to the sequence)
+// cmd/daemon.go:41 (trimmed to the sequence)
 cfg, err := loadConfig()
 log := newLogger(cfg)
 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-db, err := openStorage(ctx, cfg)          // sqlite, or postgres — see 4c
-mm, err := newMattermost(ctx, cfg, log)   // connects + authenticates now
-gm, err := gmessages.New(gmCfg)
-gm.Connect(ctx)                            // brings up the phone session
+db, err := openStorage(ctx, cfg)                        // sqlite, or postgres — see 4c
+mm, err := newMattermost(ctx, cfg, log)                 // connects + authenticates now
+gm, err := newGMessagesClientWithRetry(ctx, log, gmCfg) // retries while unpaired — see below
+gm.Connect(ctx)                                          // brings up the phone session
 br, err := bridge.New(cfg, log, db, gm, mm)
-return br.Run(ctx)                         // the loop from section 2
+return br.Run(ctx)                                       // the loop from section 2
 ```
 
 Everything gets built and connected up front, in `cmd/common.go` (the
@@ -458,7 +458,22 @@ of it already wired and connected; the bridge itself does no construction, which
 is what makes it plausible to unit-test in isolation from real network
 connections.
 
-One line worth noticing: `signal.NotifyContext` (`daemon.go:38`) turns Ctrl-C
+**`newGMessagesClientWithRetry` (`daemon.go`, next to the command) exists for
+one scenario: a container that starts `daemon` before anyone has run `pair`.**
+Plain `gmessages.New` returns `ErrNotPaired` the instant there is no session at
+`gmessages.session_ref` (`gmessages/auth.go:56`) — that's correct for a human
+running the CLI directly, but fatal for a container that starts the daemon and
+runs `pair` as two separate steps: the daemon would exit before pairing ever
+had a chance to happen. The retry loop catches specifically that error (any
+other error from `gmessages.New` still fails immediately) and waits, logging a
+`warn` each time, for `unpairedStartupRetries` (5) attempts,
+`unpairedStartupInterval` (60s) apart — a four-minute window for `msg-gw pair`
+to run against the same session store before the daemon gives up for good. The
+wait itself is a `select` on `ctx.Done()` vs. `time.After(...)`, so `docker
+stop` during that window still shuts things down promptly instead of blocking
+on the sleep.
+
+One line worth noticing: `signal.NotifyContext` (`daemon.go:49`) turns Ctrl-C
 and `SIGTERM` into a cancelled `context.Context`. Everything downstream that
 takes a `ctx` — the bridge's `select` loop, the WebSocket reconnect loop, the
 long-polling libgm connection — unblocks the moment that context is cancelled.

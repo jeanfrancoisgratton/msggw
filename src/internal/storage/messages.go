@@ -42,7 +42,7 @@ func (db *DB) SaveMessage(ctx context.Context, msg Message) error {
 			gmessages_message_id, mattermost_post_id, conversation_id,
 			direction, status, created_at
 		) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(gmessages_message_id) DO UPDATE SET
+		ON CONFLICT(tenant, gmessages_message_id) DO UPDATE SET
 			mattermost_post_id = excluded.mattermost_post_id,
 			conversation_id    = excluded.conversation_id,
 			direction          = excluded.direction,
