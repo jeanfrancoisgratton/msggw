@@ -57,11 +57,18 @@ func Open(ctx context.Context, path string) (*DB, error) {
 
 // sqliteMigrations are applied in order; each one moves the schema from
 // version i to version i+1. They are never edited once released, only
-// appended to.
+// appended to — this codebase has not shipped yet, so migration 0 below still
+// carries the tenant column directly rather than through a later ALTER TABLE;
+// see docs/MULTI-TENANCY.md.
 var sqliteMigrations = []string{
 	`
 CREATE TABLE conversations (
-    gmessages_conversation_id TEXT PRIMARY KEY,
+    -- Unused today: always ''. Exists so that multi-tenancy (several paired
+    -- phones in one daemon, see docs/MULTI-TENANCY.md) needs no migration if
+    -- it is ever implemented — only the query layer would need to start
+    -- passing something other than the default.
+    tenant                     TEXT NOT NULL DEFAULT '',
+    gmessages_conversation_id TEXT NOT NULL,
     mattermost_channel_id     TEXT NOT NULL,
     -- Empty when routing.thread_per_conversation is off: there is then no
     -- single root post standing for the conversation.
@@ -74,7 +81,11 @@ CREATE TABLE conversations (
     outgoing_participant_id   TEXT NOT NULL DEFAULT '',
     conversation_type         INTEGER NOT NULL DEFAULT 0,
     send_mode                 INTEGER NOT NULL DEFAULT 0,
-    last_seen                 INTEGER NOT NULL DEFAULT 0
+    last_seen                 INTEGER NOT NULL DEFAULT 0,
+    -- gmessages_conversation_id is a Google-assigned ID, scoped to one Google
+    -- account: nothing guarantees it can't collide across two different
+    -- tenants' accounts, so tenant is part of the key, not just a filter.
+    PRIMARY KEY (tenant, gmessages_conversation_id)
 );
 
 CREATE INDEX conversations_by_root_post ON conversations(mattermost_root_post_id);
@@ -84,21 +95,27 @@ CREATE INDEX conversations_by_channel ON conversations(mattermost_channel_id);
 -- contact can move between numbers. Keeping them in their own table avoids the
 -- one-number assumption docs/SOLUTION.md warns about.
 CREATE TABLE conversation_participants (
-    gmessages_conversation_id TEXT NOT NULL
-        REFERENCES conversations(gmessages_conversation_id) ON DELETE CASCADE,
+    tenant                     TEXT NOT NULL DEFAULT '',
+    gmessages_conversation_id TEXT NOT NULL,
     participant_id            TEXT NOT NULL,
     phone                     TEXT NOT NULL DEFAULT '',
     -- phone with spaces, dashes, dots and parentheses removed, for matching.
     normalized_phone          TEXT NOT NULL DEFAULT '',
     display_name              TEXT NOT NULL DEFAULT '',
     is_me                     INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (gmessages_conversation_id, participant_id)
+    PRIMARY KEY (tenant, gmessages_conversation_id, participant_id),
+    FOREIGN KEY (tenant, gmessages_conversation_id)
+        REFERENCES conversations(tenant, gmessages_conversation_id) ON DELETE CASCADE
 );
 
-CREATE INDEX participants_by_phone ON conversation_participants(normalized_phone);
+-- Leads with tenant: this is the sharpest cross-tenant edge there is (see
+-- docs/MULTI-TENANCY.md) — two tenants can share a contact's phone number,
+-- and FindConversationByPhone must never let one see the other's thread.
+CREATE INDEX participants_by_phone ON conversation_participants(tenant, normalized_phone);
 
 CREATE TABLE messages (
-    gmessages_message_id TEXT PRIMARY KEY,
+    tenant                TEXT NOT NULL DEFAULT '',
+    gmessages_message_id TEXT NOT NULL,
     mattermost_post_id   TEXT NOT NULL,
     conversation_id      TEXT NOT NULL,
     -- 'in' for phone to Mattermost, 'out' for Mattermost to phone.
@@ -106,7 +123,9 @@ CREATE TABLE messages (
     -- Last gmproto.MessageStatusType seen, so that a repeated status update
     -- does not re-decorate the post.
     status               INTEGER NOT NULL DEFAULT 0,
-    created_at           INTEGER NOT NULL DEFAULT 0
+    created_at           INTEGER NOT NULL DEFAULT 0,
+    -- Same collision argument as conversations.gmessages_conversation_id.
+    PRIMARY KEY (tenant, gmessages_message_id)
 );
 
 CREATE INDEX messages_by_post ON messages(mattermost_post_id);
@@ -117,6 +136,9 @@ CREATE INDEX messages_by_conversation ON messages(conversation_id);
 -- we chose. Until then the mapping lives here, which is also what stops the
 -- bridge from posting our own message back into Mattermost as if it were new.
 CREATE TABLE outbound_pending (
+    -- Not part of the key: tmp_id is a uuid.NewString() value, already
+    -- globally unique regardless of tenant.
+    tenant             TEXT NOT NULL DEFAULT '',
     tmp_id             TEXT PRIMARY KEY,
     mattermost_post_id TEXT NOT NULL,
     conversation_id    TEXT NOT NULL,
