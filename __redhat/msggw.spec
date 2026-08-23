@@ -2,7 +2,7 @@
 %define _build_id_links none
 %define _name msggw
 %define _prefix /opt
-%define _version 0.4.0
+%define _version 0.5.0
 %define _rel 1
 %define _arch x86_64
 %define _binaryname message-gateway

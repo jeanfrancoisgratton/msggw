@@ -37,3 +37,4 @@ phone; it does not mean it has been run against real hardware.
 | Optional notify-only webhook output | — | undecided | see [TODO.md](TODO.md) |
 | systemd unit in the packaging stubs | — | not started | |
 | Metrics | — | not started | |
+| Multi-tenancy (several people pairing their own phone against one deployment) | — | direction chosen, not started | see [MULTI-TENANCY.md](MULTI-TENANCY.md); storage schema is tenant-scoped, query layer/pairing/config/routing not started |

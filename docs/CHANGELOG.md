@@ -1,7 +1,6 @@
-| Release  | Date               | Comments             |
-|----------|--------------------|----------------------|
-| 1.0.0    | 2026.08.16 | Initial version.     |
-
-
-
-
+| Release | Date        | Comments                                                                                                               |
+|---------|-------------|------------------------------------------------------------------------------------------------------------------------|
+| 0.5.0   | 2026.08.22  | Storage back-ends are now multi-tenants aware, just in case I wish to go down that road                                |
+| 0.4.0   | 2026.08.22  | Configuration now resolves various URI schemes.                                                                        |
+| 0.2.0   | 2026.08.22  | Config file now supports multiple backends (added PGSQL backend); removed Facebook Messenger support; tool rebranding. |
+| 0.0.1   | 2026.08.21  | Initial version.                                                                                                       |

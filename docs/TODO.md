@@ -11,6 +11,9 @@
 - [ ] Decide whether `thread_per_conversation` should be settable **per routing
       rule** rather than globally. Today a deployment that wants threads in one
       channel and flat posts in another cannot have both.
+- [ ] Whether to support multi-tenancy (several people pairing their own phone
+      against one shared deployment) at all, and if so, in what shape. See
+      [MULTI-TENANCY.md](MULTI-TENANCY.md).
 
 ## Implemented, needs a live phone to confirm
 

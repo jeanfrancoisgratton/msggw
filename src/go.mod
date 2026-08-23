@@ -7,7 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jeanfrancoisgratton/helperFunctions/v5 v5.3.2
 	github.com/jeanfrancoisgratton/vaultlib/v2 v2.1.0
-	github.com/mattermost/mattermost/server/public v0.4.3
+	github.com/mattermost/mattermost/server/public v0.4.4
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
