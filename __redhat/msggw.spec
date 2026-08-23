@@ -55,6 +55,9 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.5.0-2
+- bug(BUILDERS): binary should be installed in /opt/sbin, not /opt/bin
+
 * Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.5.0-1
 - Merge branch 'develop'
 - chore: buildeps update, version bump, doc update
