@@ -54,6 +54,12 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.5.0-1
+- Merge branch 'develop'
+- chore: buildeps update, version bump, doc update
+- feat(storage): back-ends are now multi-tenants aware, even if currently unused
+- chore: update changelog for 0.4.0-1
+
 * Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.4.0-1
 - Merge branch 'develop'
 - Version bump
