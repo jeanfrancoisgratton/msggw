@@ -3,7 +3,7 @@
 
 pkgname=msggw
 pkgver=0.5.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Messages <-> Mattermost bridge"
 arch=('x86_64')
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
@@ -44,5 +44,5 @@ check() {
 package() {
   cd "${srcdir}/${_builddir}"
 
-  install -Dm0755 "${_binaryname}" "${pkgdir}/opt/bin/${_binaryname}"
+  install -Dm0755 "${_binaryname}" "${pkgdir}/opt/sbin/${_binaryname}"
 }
