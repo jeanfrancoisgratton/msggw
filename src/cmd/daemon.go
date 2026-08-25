@@ -8,6 +8,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -17,7 +18,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"msggw/internal/bridge"
+	"msggw/internal/config"
 	"msggw/internal/gmessages"
+	"msggw/internal/listener"
 )
 
 // When the daemon starts before "msg-gw pair" has ever been run, it retries
@@ -87,6 +90,12 @@ so the next start does not need to re-pair.`,
 			return err
 		}
 
+		if cfg.Listener.Port != 0 {
+			if err := startListener(ctx, cfg, log); err != nil {
+				return err
+			}
+		}
+
 		log.Info("bridge running",
 			"mattermost_bot", mm.BotUsername(),
 			"default_route", cfg.Routing.Default.String(),
@@ -95,6 +104,29 @@ so the next start does not need to re-pair.`,
 
 		return br.Run(ctx)
 	},
+}
+
+// startListener brings up the HTTP(S) listener (currently just a health
+// check — see internal/listener) in the background, for client-mode pairing
+// once it exists. It runs for the lifetime of ctx; a failure after startup
+// is logged rather than brought down the bridge with it, since the listener
+// is not on the message path.
+func startListener(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
+	lst, err := listener.New(listener.Config{
+		Port:     cfg.Listener.Port,
+		CertFile: cfg.Listener.CertFile,
+		KeyFile:  cfg.Listener.KeyFile,
+	}, listener.DefaultHandler(), log)
+	if err != nil {
+		return fmt.Errorf("starting the listener: %w", err)
+	}
+
+	go func() {
+		if err := lst.Run(ctx); err != nil {
+			log.Error("listener stopped", "error", err)
+		}
+	}()
+	return nil
 }
 
 // newGMessagesClientWithRetry builds the Google Messages client, retrying

@@ -7,34 +7,41 @@ package cmd
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 
 	"msggw/internal/gmessages"
 )
 
-var (
-	pairAttempts int
-	pairPrintURL bool
-)
+var pairCookiesFile string
+
+// requiredCookies is Google's own minimum set for the Gaia pairing handshake;
+// __Secure-1PSIDTS is usually present too but is not load-bearing the way
+// these are.
+var requiredCookies = []string{"SID", "HSID", "SSID", "OSID", "APISID", "SAPISID"}
 
 var pairCmd = &cobra.Command{
 	Use:   "pair",
 	Short: "Pair the daemon with Google Messages on your phone",
 	Long: `Pair the daemon with the Google Messages app on your Android phone.
 
-A QR code is shown; on the phone, open Google Messages, then
-Settings -> Device pairing -> QR code scanner, and scan it.
+Google killed QR-code device pairing, so this authenticates as your Google
+account instead. Sign into https://messages.google.com/web in a private
+browser window, open devtools, and copy the SID, HSID, SSID, OSID, APISID and
+SAPISID cookies (and __Secure-1PSIDTS if present) into a JSON file:
 
-The QR code is only valid for 30 seconds. A new one is shown automatically
-until the attempt limit is reached.
+  {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
+   "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
+
+Pass that file with --cookies-file, or pipe it to stdin. The daemon then shows
+an emoji; tap the matching one on Google Messages on the phone to confirm.
 
 Once paired, the session is stored at gmessages.session_ref and the daemon can
 reconnect without pairing again.`,
@@ -52,6 +59,11 @@ reconnect without pairing again.`,
 			return err
 		}
 
+		cookies, err := readCookies(cmd)
+		if err != nil {
+			return err
+		}
+
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
@@ -60,35 +72,55 @@ reconnect without pairing again.`,
 
 		out := cmd.OutOrStdout()
 
-		qr, err := pairing.Start(ctx)
+		emoji, err := pairing.Start(ctx, cookies)
 		if err != nil {
 			return err
 		}
 
-		for attempt := 1; ; attempt++ {
-			log.Info("Google Messages pairing URL", "url", qr, "attempt", attempt, "max_attempts", pairAttempts)
-			showQR(out, qr, attempt, pairAttempts)
+		fmt.Fprintf(out, "\nOn the phone, open Google Messages and tap this emoji when it's offered:\n\n  %s\n\n", emoji)
+		fmt.Fprintln(out, "Waiting for confirmation...")
 
-			phoneID, err := pairing.Wait(ctx)
-			if err == nil {
-				fmt.Fprintf(out, "\nPaired with phone %s.\n", phoneID)
-				fmt.Fprintf(out, "Session stored at %s.\n", gmCfg.Session.Describe())
-				return verifyPairing(ctx, out, pairing)
-			}
-
-			if !errors.Is(err, gmessages.ErrPairingTimeout) {
-				return err
-			}
-			if attempt >= pairAttempts {
-				return fmt.Errorf("gave up after %d QR codes went unscanned", pairAttempts)
-			}
-
-			fmt.Fprintln(out, "\nThat QR code expired. Here is a new one.")
-			if qr, err = pairing.Refresh(); err != nil {
-				return err
-			}
+		phoneID, err := pairing.Wait(ctx)
+		if err != nil {
+			return err
 		}
+
+		fmt.Fprintf(out, "\nPaired with phone %s.\n", phoneID)
+		fmt.Fprintf(out, "Session stored at %s.\n", gmCfg.Session.Describe())
+		return verifyPairing(ctx, out, pairing)
 	},
+}
+
+// readCookies loads the Google account cookies from --cookies-file, or from
+// stdin when that flag is not given.
+func readCookies(cmd *cobra.Command) (map[string]string, error) {
+	var r io.Reader
+	if pairCookiesFile != "" {
+		f, err := os.Open(pairCookiesFile)
+		if err != nil {
+			return nil, fmt.Errorf("opening cookies file: %w", err)
+		}
+		defer f.Close()
+		r = f
+	} else {
+		r = cmd.InOrStdin()
+	}
+
+	var cookies map[string]string
+	if err := json.NewDecoder(r).Decode(&cookies); err != nil {
+		return nil, fmt.Errorf("reading cookies as JSON: %w", err)
+	}
+
+	var missing []string
+	for _, name := range requiredCookies {
+		if cookies[name] == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing required cookies: %s", strings.Join(missing, ", "))
+	}
+	return cookies, nil
 }
 
 // verifyPairing proves the session works by reconnecting with it and waiting
@@ -122,28 +154,7 @@ func verifyPairing(ctx context.Context, out io.Writer, pairing *gmessages.Pairin
 	return nil
 }
 
-func showQR(out io.Writer, qr string, attempt, maxAttempts int) {
-	if pairPrintURL {
-		fmt.Fprintf(out, "\nPairing URL (attempt %d/%d):\n%s\n", attempt, maxAttempts, qr)
-		return
-	}
-
-	fmt.Fprintf(out, "\nScan this with Google Messages (attempt %d/%d):\n\n", attempt, maxAttempts)
-	// Half blocks keep the code small enough to fit an ordinary terminal, and
-	// the QR standard's own quiet zone is what makes it scannable at all.
-	qrterminal.GenerateWithConfig(qr, qrterminal.Config{
-		Level:      qrterminal.L,
-		Writer:     out,
-		HalfBlocks: true,
-		BlackChar:  qrterminal.BLACK_BLACK,
-		WhiteChar:  qrterminal.WHITE_WHITE,
-		QuietZone:  2,
-	})
-}
-
 func init() {
-	pairCmd.Flags().IntVarP(&pairAttempts, "attempts", "a", 6,
-		"how many QR codes to show before giving up")
-	pairCmd.Flags().BoolVar(&pairPrintURL, "print-url", false,
-		"print the pairing URL instead of a QR code, for terminals that cannot render one")
+	pairCmd.Flags().StringVar(&pairCookiesFile, "cookies-file", "",
+		"JSON file with Google account cookies (reads stdin if omitted)")
 }

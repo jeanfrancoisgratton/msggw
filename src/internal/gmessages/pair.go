@@ -11,93 +11,69 @@ import (
 	"fmt"
 	"time"
 
-	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
+	"go.mau.fi/mautrix-gmessages/pkg/libgm"
 )
 
-// qrExpiry is how long a pairing QR code stays valid. It is Google's window,
-// not ours: after it, the code has to be regenerated.
-const qrExpiry = 30 * time.Second
+// Pairing errors, re-exported from libgm so that callers do not need to
+// import it directly — everything that knows about the Google Messages
+// protocol is meant to stay behind this package.
+var (
+	ErrNoCookies          = libgm.ErrNoCookies
+	ErrNoDevicesFound     = libgm.ErrNoDevicesFound
+	ErrIncorrectEmoji     = libgm.ErrIncorrectEmoji
+	ErrPairingCancelled   = libgm.ErrPairingCancelled
+	ErrPairingTimeout     = libgm.ErrPairingTimeout
+	ErrPairingInitTimeout = libgm.ErrPairingInitTimeout
+	ErrHadMultipleDevices = libgm.ErrHadMultipleDevices
+)
 
-// ErrPairingTimeout is returned when the QR code was never scanned.
-var ErrPairingTimeout = errors.New("the QR code was not scanned in time")
-
-// Pairing drives the QR pairing flow: the daemon shows a QR code, the operator
-// scans it from Google Messages on the phone under Settings → Device pairing,
-// and the phone hands back the session credentials.
+// Pairing drives the Google-account pairing flow: the operator supplies
+// cookies lifted from a signed-in browser session, the daemon shows an
+// emoji, and tapping it on the Google Messages app on the phone hands back
+// the session credentials.
 //
-// The Google-account flow libgm also offers is not used here. It needs cookies
-// lifted from a signed-in browser session, which is not something a headless
-// daemon can obtain on its own.
+// QR pairing — scanning a code shown here from Google Messages' own device
+// pairing screen — is gone. Google retired the endpoint it depended on;
+// cookies plus an emoji confirmation is the only pairing method libgm still
+// has that works.
 type Pairing struct {
 	client *Client
-	paired chan *gmproto.PairedData
+	sess   *libgm.PairingSession
 	events <-chan Event
 }
 
 // NewPairing starts a pairing session on a fresh, unpaired client.
 func NewPairing(cfg Config) *Pairing {
-	p := &Pairing{
-		client: NewUnpaired(cfg),
-		paired: make(chan *gmproto.PairedData, 1),
-	}
-
-	// Installing a callback takes libgm's default post-pairing behaviour out
-	// of the picture — no PairSuccessful event, no automatic reconnect — so
-	// that the session is persisted before anything else happens to it.
-	callback := func(data *gmproto.PairedData) {
-		select {
-		case p.paired <- data:
-		default:
-		}
-	}
-	p.client.gm.PairCallback.Store(&callback)
-
-	return p
+	return &Pairing{client: NewUnpaired(cfg)}
 }
 
-// Start returns the URL to encode as a QR code for the phone to scan.
-func (p *Pairing) Start(ctx context.Context) (string, error) {
+// Start authenticates with cookies lifted from a signed-in Google Messages
+// for web browser session and returns the emoji to confirm on the phone.
+func (p *Pairing) Start(ctx context.Context, cookies map[string]string) (emoji string, err error) {
+	p.client.gm.AuthData.SetCookies(cookies)
 	if err := p.client.gm.FetchConfig(ctx); err != nil {
 		return "", fmt.Errorf("fetching the Google Messages client config: %w", err)
 	}
-	qr, err := p.client.gm.StartLogin()
+	emoji, sess, err := p.client.gm.StartGaiaPairing(ctx)
 	if err != nil {
 		return "", fmt.Errorf("starting the pairing: %w", err)
 	}
-	return qr, nil
+	p.sess = sess
+	return emoji, nil
 }
 
-// Refresh issues a new QR code after the previous one expired.
-func (p *Pairing) Refresh() (string, error) {
-	qr, err := p.client.gm.RefreshPhoneRelay()
-	if err != nil {
-		return "", fmt.Errorf("refreshing the pairing QR code: %w", err)
-	}
-	return qr, nil
-}
-
-// Wait blocks until the phone completes the pairing, the QR code expires, or
-// ctx is cancelled. On expiry it returns ErrPairingTimeout, and the caller is
-// expected to call Refresh and Wait again.
+// Wait blocks until the phone confirms the emoji, or ctx is cancelled.
 func (p *Pairing) Wait(ctx context.Context) (phoneID string, err error) {
-	timer := time.NewTimer(qrExpiry)
-	defer timer.Stop()
-
-	select {
-	case data := <-p.paired:
-		phoneID = data.GetMobile().GetSourceID()
-		p.client.session.SetPhoneID(phoneID)
-		if err := p.client.saveSession(); err != nil {
-			return "", fmt.Errorf("the phone paired, but the session could not be stored: %w", err)
-		}
-		return phoneID, nil
-
-	case <-timer.C:
-		return "", ErrPairingTimeout
-
-	case <-ctx.Done():
-		return "", ctx.Err()
+	if _, err := p.client.gm.FinishGaiaPairing(ctx, p.sess); err != nil {
+		return "", fmt.Errorf("finishing the pairing: %w", err)
 	}
+
+	phoneID = p.client.gm.AuthData.Mobile.GetSourceID()
+	p.client.session.SetPhoneID(phoneID)
+	if err := p.client.saveSession(); err != nil {
+		return "", fmt.Errorf("the phone paired, but the session could not be stored: %w", err)
+	}
+	return phoneID, nil
 }
 
 // Verify reconnects with the freshly stored session and waits for the phone to

@@ -6,6 +6,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -309,5 +310,34 @@ func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
 
 	if _, err := Load(writeConfig(t, body)); err == nil {
 		t.Fatal("a rule that is both groups-only and directs-only was accepted")
+	}
+}
+
+// TestListenerPortValidation covers that 0 (the documented "disabled") is
+// accepted, but an out-of-range port is not — Load never dials the port
+// itself, so a typo would otherwise only surface when the daemon fails to
+// bind at startup.
+func TestListenerPortValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		port    int
+		wantErr bool
+	}{
+		{"zero disables it", 0, false},
+		{"a normal port", 8443, false},
+		{"negative", -1, true},
+		{"above 65535", 70000, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := strings.TrimSuffix(minimalConfig, "}") +
+				fmt.Sprintf(`, "listener": {"port": %d}}`, tc.port)
+			_, err := Load(writeConfig(t, body))
+			if tc.wantErr && err == nil {
+				t.Errorf("listener.port %d was accepted, want an error", tc.port)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("listener.port %d: %v", tc.port, err)
+			}
+		})
 	}
 }

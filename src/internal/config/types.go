@@ -47,6 +47,7 @@ type Config struct {
 	GMessages  GMessagesConfig     `json:"gmessages"`
 	Mattermost MattermostConfig    `json:"mattermost"`
 	Routing    RoutingConfig       `json:"routing"`
+	Listener   ListenerConfig      `json:"listener,omitempty"`
 
 	// path records where this config was read from, for diagnostics.
 	path string
@@ -163,6 +164,24 @@ type RoutingConfig struct {
 	// not yet a member of, rather than failing. A bot cannot post to a channel
 	// it has not joined.
 	JoinChannels bool `json:"join_channels,omitempty"`
+}
+
+// ListenerConfig configures the daemon's HTTP(S) listener. It exists for
+// "client mode" pairing: a client running on the operator's own device (not
+// this host) registers pairing material without ever sending it to the
+// daemon's host over an unencrypted channel — see docs/MULTI-TENANCY.md.
+//
+// The listener is disabled unless Port is set; there is no separate "enabled"
+// flag, the same way GMessagesConfig.BackfillCount uses 0 to mean off.
+type ListenerConfig struct {
+	// Port is what the listener binds to, on all interfaces. 0 disables it.
+	Port int `json:"port,omitempty"`
+	// CertFile and KeyFile are the TLS certificate and private key, as plain
+	// filesystem paths. Missing or unusable, the listener falls back to plain
+	// HTTP rather than refusing to start — loudly, since that is a
+	// consequential thing for it to do silently. See internal/listener.
+	CertFile string `json:"cert_file,omitempty"`
+	KeyFile  string `json:"key_file,omitempty"`
 }
 
 // Destination is one place in Mattermost.

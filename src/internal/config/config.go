@@ -173,6 +173,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.Listener.Port != 0 && (c.Listener.Port < 1 || c.Listener.Port > 65535) {
+		problems = append(problems, fmt.Errorf("listener.port %d must be between 1 and 65535", c.Listener.Port))
+	}
+
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
 	default:
