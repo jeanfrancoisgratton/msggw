@@ -9,11 +9,8 @@
       and where it plugs in. The secret plumbing already handles it: a webhook
       URL is just another reference (`vault:`, `file:`, `env:`, …).
 - [ ] Decide whether `thread_per_conversation` should be settable **per routing
-      rule** rather than globally. Today a deployment that wants threads in one
-      channel and flat posts in another cannot have both.
-- [ ] Whether to support multi-tenancy (several people pairing their own phone
-      against one shared deployment) at all, and if so, in what shape. See
-      [MULTI-TENANCY.md](MULTI-TENANCY.md).
+      rule** rather than per user. Today a deployment that wants threads in one
+      channel and flat posts in another, for the same user, cannot have both.
 
 ## Implemented, needs a live phone to confirm
 
@@ -41,6 +38,3 @@
 - [ ] Prometheus or similar metrics.
 - [ ] systemd unit in the packaging stubs (`__debian`, `__redhat`,
       `__alpine`, `__archlinux`).
-- [ ] Google-account (Gaia) pairing as an alternative to the QR flow. It needs
-      cookies from a signed-in browser session, which a headless daemon cannot
-      obtain on its own; it would have to be a `cookies_ref` secret.

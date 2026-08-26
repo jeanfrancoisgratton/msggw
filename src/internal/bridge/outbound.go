@@ -64,7 +64,7 @@ func (b *Bridge) handleOutgoingPost(ctx context.Context, post mattermost.Post) e
 	// The phone will echo this message back with a real ID; the temporary ID
 	// is what will let that echo be recognised as ours rather than posted
 	// again.
-	if err := b.db.AddPendingOutbound(ctx, result.TmpID, post.ID, conv.ID); err != nil {
+	if err := b.db.AddPendingOutbound(ctx, b.tenant, result.TmpID, post.ID, conv.ID); err != nil {
 		return fmt.Errorf("recording the outgoing message from post %s: %w", post.ID, err)
 	}
 
@@ -79,7 +79,7 @@ func (b *Bridge) handleOutgoingPost(ctx context.Context, post mattermost.Post) e
 // for.
 func (b *Bridge) conversationForPost(ctx context.Context, post mattermost.Post) (storage.Conversation, error) {
 	if b.threadMode {
-		conv, err := b.db.GetConversationByRootPost(ctx, post.ThreadRoot())
+		conv, err := b.db.GetConversationByRootPost(ctx, b.tenant, post.ThreadRoot())
 		if err != nil {
 			return storage.Conversation{}, err
 		}
@@ -89,7 +89,7 @@ func (b *Bridge) conversationForPost(ctx context.Context, post mattermost.Post) 
 	// Without threads, the channel itself identifies the conversation — and
 	// only when exactly one is bridged into it. GetSoleConversationInChannel
 	// refuses to guess otherwise.
-	conv, err := b.db.GetSoleConversationInChannel(ctx, post.ChannelID)
+	conv, err := b.db.GetSoleConversationInChannel(ctx, b.tenant, post.ChannelID)
 	if err != nil {
 		return storage.Conversation{}, err
 	}
@@ -121,7 +121,7 @@ func (b *Bridge) messageForPost(ctx context.Context, postID string) (storage.Mes
 	// The mapping table is keyed by message ID, so this is a scan of one
 	// index rather than a lookup; there is no reverse index because this path
 	// is rare and the table is small.
-	return b.db.GetMessageByPost(ctx, postID)
+	return b.db.GetMessageByPost(ctx, b.tenant, postID)
 }
 
 // fetchAttachments downloads a post's files from Mattermost so they can be
@@ -155,7 +155,7 @@ func (b *Bridge) reportSendFailure(ctx context.Context, post mattermost.Post, co
 	b.log.Error("could not send a Mattermost post to the phone",
 		"conversation", conv.ID, "post", post.ID, "error", sendErr)
 
-	if b.cfg.Routing.PostDeliveryStatus {
+	if b.user.Routing.PostDeliveryStatus {
 		if err := b.mm.React(ctx, post.ID, emojiFailed); err != nil {
 			b.log.Warn("could not mark a failed post", "post", post.ID, "error", err)
 		}

@@ -44,13 +44,29 @@ type Config struct {
 
 	Log        LogConfig           `json:"log"`
 	Vault      secrets.VaultConfig `json:"vault,omitempty"`
-	GMessages  GMessagesConfig     `json:"gmessages"`
 	Mattermost MattermostConfig    `json:"mattermost"`
-	Routing    RoutingConfig       `json:"routing"`
 	Listener   ListenerConfig      `json:"listener,omitempty"`
+
+	// Users is one entry per paired phone — see docs/MULTI-TENANCY.md. There
+	// is always at least one: a single-user deployment is just a Users slice
+	// of length one, not a separate shape.
+	Users []UserConfig `json:"users"`
 
 	// path records where this config was read from, for diagnostics.
 	path string
+}
+
+// UserConfig is one tenant: one paired phone, with its own session and its
+// own routing. Everything else (Mattermost, the database, logging) is
+// shared across every tenant in Users.
+type UserConfig struct {
+	// Name identifies this tenant — in pairing ("msg-gw pair NAME"), in
+	// status output, and as the tenant column's value in storage. It must be
+	// unique among Users.
+	Name string `json:"name"`
+
+	GMessages GMessagesConfig `json:"gmessages"`
+	Routing   RoutingConfig   `json:"routing"`
 }
 
 // BackendConfig selects the storage backend. Both the SQLite and Postgres
@@ -161,9 +177,16 @@ type RoutingConfig struct {
 	PostDeliveryStatus bool `json:"post_delivery_status,omitempty"`
 
 	// JoinChannels makes the daemon add the bot to a resolved channel it is
-	// not yet a member of, rather than failing. A bot cannot post to a channel
-	// it has not joined.
+	// not yet a member of, or create it if it does not exist yet at all,
+	// rather than failing. A bot cannot post to a channel it has not joined.
 	JoinChannels bool `json:"join_channels,omitempty"`
+}
+
+// ThreadPerConversationEnabled reads the tri-state ThreadPerConversation
+// flag after defaults have been applied (nil only before Config.Load runs
+// applyDefaults).
+func (r RoutingConfig) ThreadPerConversationEnabled() bool {
+	return r.ThreadPerConversation == nil || *r.ThreadPerConversation
 }
 
 // ListenerConfig configures the daemon's HTTP(S) listener. It exists for

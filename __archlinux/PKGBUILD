@@ -2,8 +2,8 @@
 # Packager: Package builder <builder@famillegratton.net>
 
 pkgname=msggw
-pkgver=0.5.0
-pkgrel=2
+pkgver=0.6.0
+pkgrel=1
 pkgdesc="Messages <-> Mattermost bridge"
 arch=('x86_64')
 url="https://git.famillegratton.net:3000/mainline/msggw.git"

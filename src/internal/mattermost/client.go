@@ -40,9 +40,6 @@ type Config struct {
 	// ReconnectBackoff is the initial delay before reconnecting a dropped
 	// WebSocket; it doubles up to maxReconnectBackoff.
 	ReconnectBackoff time.Duration
-	// JoinChannels lets the daemon add the bot to a channel it is not a member
-	// of, instead of failing to post there.
-	JoinChannels bool
 	// Vault is used to resolve any routing destination field (team, channel,
 	// user, ...) that is given as a secret reference rather than a plain
 	// value.

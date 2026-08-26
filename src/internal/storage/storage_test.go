@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+// testTenant is used everywhere a single-tenant test does not care about the
+// tenant column beyond it being consistently non-empty. Tenant isolation
+// itself is covered separately, in TestTenantIsolation.
+const testTenant = "t1"
+
 func openTestDB(t *testing.T) (*DB, context.Context) {
 	t.Helper()
 	ctx := context.Background()
@@ -76,11 +81,11 @@ func TestConversationRoundTrip(t *testing.T) {
 			{ID: "p-me", Phone: "+1 514 000-0000", IsMe: true},
 		},
 	}
-	if err := db.SaveConversation(ctx, conv); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, conv); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
 
-	got, err := db.GetConversation(ctx, "conv-1")
+	got, err := db.GetConversation(ctx, testTenant, "conv-1")
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}
@@ -94,7 +99,7 @@ func TestConversationRoundTrip(t *testing.T) {
 
 	// The reverse lookup by root post is what turns a Mattermost reply back
 	// into a conversation.
-	byRoot, err := db.GetConversationByRootPost(ctx, "post-root")
+	byRoot, err := db.GetConversationByRootPost(ctx, testTenant, "post-root")
 	if err != nil {
 		t.Fatalf("GetConversationByRootPost: %v", err)
 	}
@@ -103,7 +108,7 @@ func TestConversationRoundTrip(t *testing.T) {
 	}
 
 	// And the number lookup has to survive reformatting.
-	byPhone, err := db.FindConversationByPhone(ctx, "+15145551212")
+	byPhone, err := db.FindConversationByPhone(ctx, testTenant, "+15145551212")
 	if err != nil {
 		t.Fatalf("FindConversationByPhone: %v", err)
 	}
@@ -115,14 +120,14 @@ func TestConversationRoundTrip(t *testing.T) {
 func TestFindConversationByPhoneIgnoresOurOwnNumber(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if err := db.SaveConversation(ctx, Conversation{
+	if err := db.SaveConversation(ctx, testTenant, Conversation{
 		ID: "conv-1", ChannelID: "c", RootPostID: "r",
 		Participants: []Participant{{ID: "p-me", Phone: "+15140000000", IsMe: true}},
 	}); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
 
-	if _, err := db.FindConversationByPhone(ctx, "+15140000000"); !errors.Is(err, ErrNotFound) {
+	if _, err := db.FindConversationByPhone(ctx, testTenant, "+15140000000"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("FindConversationByPhone matched our own number, err = %v", err)
 	}
 }
@@ -132,17 +137,17 @@ func TestSaveConversationReplacesParticipants(t *testing.T) {
 
 	base := Conversation{ID: "conv-1", ChannelID: "c", RootPostID: "r"}
 	base.Participants = []Participant{{ID: "p1", Phone: "+15145551212"}}
-	if err := db.SaveConversation(ctx, base); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, base); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
 
 	// A group whose membership changed must not accumulate former members.
 	base.Participants = []Participant{{ID: "p2", Phone: "+15145551213"}}
-	if err := db.SaveConversation(ctx, base); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, base); err != nil {
 		t.Fatalf("SaveConversation (update): %v", err)
 	}
 
-	got, err := db.GetConversation(ctx, "conv-1")
+	got, err := db.GetConversation(ctx, testTenant, "conv-1")
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}
@@ -154,11 +159,11 @@ func TestSaveConversationReplacesParticipants(t *testing.T) {
 func TestGetSoleConversationInChannel(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if err := db.SaveConversation(ctx, Conversation{ID: "conv-1", ChannelID: "shared"}); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, Conversation{ID: "conv-1", ChannelID: "shared"}); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
 
-	got, err := db.GetSoleConversationInChannel(ctx, "shared")
+	got, err := db.GetSoleConversationInChannel(ctx, testTenant, "shared")
 	if err != nil {
 		t.Fatalf("GetSoleConversationInChannel: %v", err)
 	}
@@ -168,10 +173,10 @@ func TestGetSoleConversationInChannel(t *testing.T) {
 
 	// With a second conversation in the same channel there is no right answer,
 	// and guessing would send a reply to the wrong person.
-	if err := db.SaveConversation(ctx, Conversation{ID: "conv-2", ChannelID: "shared"}); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, Conversation{ID: "conv-2", ChannelID: "shared"}); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
-	if _, err := db.GetSoleConversationInChannel(ctx, "shared"); !errors.Is(err, ErrNotFound) {
+	if _, err := db.GetSoleConversationInChannel(ctx, testTenant, "shared"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("with two conversations in a channel, err = %v, want ErrNotFound", err)
 	}
 }
@@ -181,7 +186,7 @@ func TestGetSoleConversationInChannel(t *testing.T) {
 func TestMessageDeduplication(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if _, err := db.GetMessage(ctx, "msg-1"); !errors.Is(err, ErrNotFound) {
+	if _, err := db.GetMessage(ctx, testTenant, "msg-1"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetMessage on an empty database, err = %v, want ErrNotFound", err)
 	}
 
@@ -189,11 +194,11 @@ func TestMessageDeduplication(t *testing.T) {
 		ID: "msg-1", PostID: "post-1", ConversationID: "conv-1",
 		Direction: DirectionIn, Status: 100, CreatedAt: time.Unix(1_700_000_000, 0),
 	}
-	if err := db.SaveMessage(ctx, msg); err != nil {
+	if err := db.SaveMessage(ctx, testTenant, msg); err != nil {
 		t.Fatalf("SaveMessage: %v", err)
 	}
 
-	got, err := db.GetMessage(ctx, "msg-1")
+	got, err := db.GetMessage(ctx, testTenant, "msg-1")
 	if err != nil {
 		t.Fatalf("GetMessage: %v", err)
 	}
@@ -201,7 +206,7 @@ func TestMessageDeduplication(t *testing.T) {
 		t.Errorf("GetMessage returned %+v", got)
 	}
 
-	byPost, err := db.GetMessageByPost(ctx, "post-1")
+	byPost, err := db.GetMessageByPost(ctx, testTenant, "post-1")
 	if err != nil {
 		t.Fatalf("GetMessageByPost: %v", err)
 	}
@@ -213,14 +218,14 @@ func TestMessageDeduplication(t *testing.T) {
 func TestUpdateMessageStatusReportsChange(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if err := db.SaveMessage(ctx, Message{
+	if err := db.SaveMessage(ctx, testTenant, Message{
 		ID: "msg-1", PostID: "post-1", ConversationID: "conv-1",
 		Direction: DirectionOut, Status: 1,
 	}); err != nil {
 		t.Fatalf("SaveMessage: %v", err)
 	}
 
-	changed, err := db.UpdateMessageStatus(ctx, "msg-1", 2)
+	changed, err := db.UpdateMessageStatus(ctx, testTenant, "msg-1", 2)
 	if err != nil {
 		t.Fatalf("UpdateMessageStatus: %v", err)
 	}
@@ -230,7 +235,7 @@ func TestUpdateMessageStatusReportsChange(t *testing.T) {
 
 	// The phone repeats status updates; a repeat must not be reported as a
 	// change, or the post's reactions would churn.
-	changed, err = db.UpdateMessageStatus(ctx, "msg-1", 2)
+	changed, err = db.UpdateMessageStatus(ctx, testTenant, "msg-1", 2)
 	if err != nil {
 		t.Fatalf("UpdateMessageStatus (repeat): %v", err)
 	}
@@ -245,7 +250,7 @@ func TestUpdateMessageStatusReportsChange(t *testing.T) {
 func TestPendingOutbound(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if err := db.AddPendingOutbound(ctx, "tmp-1", "post-1", "conv-1"); err != nil {
+	if err := db.AddPendingOutbound(ctx, testTenant, "tmp-1", "post-1", "conv-1"); err != nil {
 		t.Fatalf("AddPendingOutbound: %v", err)
 	}
 
@@ -272,12 +277,12 @@ func TestPendingOutbound(t *testing.T) {
 func TestPrunePendingOutbound(t *testing.T) {
 	db, ctx := openTestDB(t)
 
-	if err := db.AddPendingOutbound(ctx, "tmp-1", "post-1", "conv-1"); err != nil {
+	if err := db.AddPendingOutbound(ctx, testTenant, "tmp-1", "post-1", "conv-1"); err != nil {
 		t.Fatalf("AddPendingOutbound: %v", err)
 	}
 
 	// Nothing is old enough yet.
-	removed, err := db.PrunePendingOutbound(ctx, time.Hour)
+	removed, err := db.PrunePendingOutbound(ctx, testTenant, time.Hour)
 	if err != nil {
 		t.Fatalf("PrunePendingOutbound: %v", err)
 	}
@@ -286,7 +291,7 @@ func TestPrunePendingOutbound(t *testing.T) {
 	}
 
 	// A zero maximum age makes everything already written expired.
-	removed, err = db.PrunePendingOutbound(ctx, 0)
+	removed, err = db.PrunePendingOutbound(ctx, testTenant, 0)
 	if err != nil {
 		t.Fatalf("PrunePendingOutbound: %v", err)
 	}
@@ -305,7 +310,7 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Open: %v", err)
 	}
-	if err := db.SaveConversation(ctx, Conversation{ID: "conv-1", ChannelID: "c"}); err != nil {
+	if err := db.SaveConversation(ctx, testTenant, Conversation{ID: "conv-1", ChannelID: "c"}); err != nil {
 		t.Fatalf("SaveConversation: %v", err)
 	}
 	db.Close()
@@ -316,7 +321,7 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	}
 	defer db.Close()
 
-	if _, err := db.GetConversation(ctx, "conv-1"); err != nil {
+	if _, err := db.GetConversation(ctx, testTenant, "conv-1"); err != nil {
 		t.Errorf("the conversation did not survive a reopen: %v", err)
 	}
 }
@@ -340,5 +345,78 @@ func TestMeta(t *testing.T) {
 	}
 	if value, err = db.GetMeta(ctx, "k"); err != nil || value != "v2" {
 		t.Errorf("GetMeta = %q, %v, want \"v2\", nil", value, err)
+	}
+}
+
+// TestTenantIsolation covers docs/MULTI-TENANCY.md's sharpest cross-tenant
+// edge: two tenants whose contacts share a phone number, or who route into
+// the same Mattermost channel, must never see each other's conversations.
+func TestTenantIsolation(t *testing.T) {
+	db, ctx := openTestDB(t)
+
+	const alice, bob = "alice", "bob"
+
+	// Both tenants have a contact at the same number, in their own
+	// conversation. FindConversationByPhone must resolve each tenant to its
+	// own conversation, never the other's.
+	if err := db.SaveConversation(ctx, alice, Conversation{
+		ID: "conv-shared-number", ChannelID: "alice-channel",
+		Participants: []Participant{{ID: "p1", Phone: "+15145551212"}},
+	}); err != nil {
+		t.Fatalf("SaveConversation(alice): %v", err)
+	}
+	if err := db.SaveConversation(ctx, bob, Conversation{
+		ID: "conv-shared-number", ChannelID: "bob-channel",
+		Participants: []Participant{{ID: "p1", Phone: "+15145551212"}},
+	}); err != nil {
+		t.Fatalf("SaveConversation(bob): %v", err)
+	}
+
+	aliceConv, err := db.FindConversationByPhone(ctx, alice, "+15145551212")
+	if err != nil {
+		t.Fatalf("FindConversationByPhone(alice): %v", err)
+	}
+	if aliceConv.ChannelID != "alice-channel" {
+		t.Errorf("FindConversationByPhone(alice) returned channel %q, want alice's own", aliceConv.ChannelID)
+	}
+	bobConv, err := db.FindConversationByPhone(ctx, bob, "+15145551212")
+	if err != nil {
+		t.Fatalf("FindConversationByPhone(bob): %v", err)
+	}
+	if bobConv.ChannelID != "bob-channel" {
+		t.Errorf("FindConversationByPhone(bob) returned channel %q, want bob's own", bobConv.ChannelID)
+	}
+
+	// Two tenants sharing one destination channel: each has exactly one
+	// conversation there, so GetSoleConversationInChannel must succeed for
+	// both, scoped to their own conversation — not fail because the channel
+	// holds two conversations in total.
+	if err := db.SaveConversation(ctx, alice, Conversation{ID: "conv-a", ChannelID: "shared-channel"}); err != nil {
+		t.Fatalf("SaveConversation(alice, shared): %v", err)
+	}
+	if err := db.SaveConversation(ctx, bob, Conversation{ID: "conv-b", ChannelID: "shared-channel"}); err != nil {
+		t.Fatalf("SaveConversation(bob, shared): %v", err)
+	}
+
+	got, err := db.GetSoleConversationInChannel(ctx, alice, "shared-channel")
+	if err != nil {
+		t.Fatalf("GetSoleConversationInChannel(alice): %v", err)
+	}
+	if got.ID != "conv-a" {
+		t.Errorf("GetSoleConversationInChannel(alice) = %q, want conv-a", got.ID)
+	}
+	got, err = db.GetSoleConversationInChannel(ctx, bob, "shared-channel")
+	if err != nil {
+		t.Fatalf("GetSoleConversationInChannel(bob): %v", err)
+	}
+	if got.ID != "conv-b" {
+		t.Errorf("GetSoleConversationInChannel(bob) = %q, want conv-b", got.ID)
+	}
+
+	// ListConversations and CountMessages must also stay within one tenant.
+	if convs, err := db.ListConversations(ctx, alice); err != nil {
+		t.Fatalf("ListConversations(alice): %v", err)
+	} else if len(convs) != 2 {
+		t.Errorf("ListConversations(alice) = %d conversations, want 2 (conv-shared-number, conv-a)", len(convs))
 	}
 }

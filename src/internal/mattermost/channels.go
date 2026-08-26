@@ -7,7 +7,9 @@ package mattermost
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -17,13 +19,15 @@ import (
 )
 
 // ResolveDestination turns a configured destination into a channel ID the
-// daemon can post to, joining the channel first when that is allowed and
-// needed.
+// daemon can post to, joining (or creating) the channel first when
+// joinChannels allows it and it is needed. joinChannels is the caller's own
+// routing.join_channels — each tenant's own setting governs its own
+// destinations, since one shared Client serves every tenant.
 //
 // Resolutions are cached: the answer for a given destination does not change
 // while the daemon runs, and re-resolving costs REST calls on the path of
 // every message.
-func (c *Client) ResolveDestination(ctx context.Context, dest config.Destination) (string, error) {
+func (c *Client) ResolveDestination(ctx context.Context, dest config.Destination, joinChannels bool) (string, error) {
 	key := destinationKey(dest)
 
 	c.mu.RLock()
@@ -33,11 +37,11 @@ func (c *Client) ResolveDestination(ctx context.Context, dest config.Destination
 		return cached, nil
 	}
 
-	channelID, err := c.resolve(ctx, dest)
+	channelID, err := c.resolve(ctx, dest, joinChannels)
 	if err != nil {
 		return "", err
 	}
-	if err := c.ensureMember(ctx, channelID); err != nil {
+	if err := c.ensureMember(ctx, channelID, joinChannels); err != nil {
 		return "", err
 	}
 
@@ -50,7 +54,7 @@ func (c *Client) ResolveDestination(ctx context.Context, dest config.Destination
 	return channelID, nil
 }
 
-func (c *Client) resolve(ctx context.Context, dest config.Destination) (string, error) {
+func (c *Client) resolve(ctx context.Context, dest config.Destination, joinChannels bool) (string, error) {
 	dest, err := c.resolveDestinationRefs(dest)
 	if err != nil {
 		return "", err
@@ -66,10 +70,13 @@ func (c *Client) resolve(ctx context.Context, dest config.Destination) (string, 
 
 	case config.DestChannel:
 		channel, _, err := c.api.GetChannelByNameForTeamName(ctx, dest.Channel, dest.Team, "")
-		if err != nil {
+		if err == nil {
+			return channel.Id, nil
+		}
+		if !isNotFound(err) || !joinChannels {
 			return "", fmt.Errorf("looking up channel ~%s in team %s: %w", dest.Channel, dest.Team, err)
 		}
-		return channel.Id, nil
+		return c.createChannel(ctx, dest)
 
 	case config.DestDirect:
 		userID, err := c.userID(ctx, dest.User)
@@ -104,6 +111,40 @@ func (c *Client) resolve(ctx context.Context, dest config.Destination) (string, 
 	default:
 		return "", fmt.Errorf("unknown destination type %q", dest.Type)
 	}
+}
+
+// createChannel creates a named channel that GetChannelByNameForTeamName just
+// reported missing. It defaults to private: a group's RCS/SMS history is
+// personal content, not something that should default to being visible to
+// everyone else on the Mattermost server. The bot creating the channel is
+// automatically a member of it, so no separate ensureMember call is needed
+// for this path.
+func (c *Client) createChannel(ctx context.Context, dest config.Destination) (string, error) {
+	team, _, err := c.api.GetTeamByName(ctx, dest.Team, "")
+	if err != nil {
+		return "", fmt.Errorf("looking up team %s to create channel ~%s: %w", dest.Team, dest.Channel, err)
+	}
+
+	channel, _, err := c.api.CreateChannel(ctx, &model.Channel{
+		TeamId:      team.Id,
+		Name:        dest.Channel,
+		DisplayName: dest.Channel,
+		Type:        model.ChannelTypePrivate,
+	})
+	if err != nil {
+		return "", fmt.Errorf("creating channel ~%s in team %s: %w", dest.Channel, dest.Team, err)
+	}
+	c.log.Info("created a missing routing destination channel",
+		"channel", dest.Channel, "team", dest.Team, "channel_id", channel.Id)
+	return channel.Id, nil
+}
+
+// isNotFound reports whether err is a Mattermost 404 — the channel or team
+// named simply does not exist yet, as opposed to a real failure (bad
+// credentials, the server being unreachable, ...).
+func isNotFound(err error) bool {
+	var appErr *model.AppError
+	return errors.As(err, &appErr) && appErr.StatusCode == http.StatusNotFound
 }
 
 // resolveDestinationRefs resolves any of dest's fields that are given as a
@@ -145,13 +186,13 @@ func (c *Client) resolveDestinationRefs(dest config.Destination) (config.Destina
 //
 // Direct and group channels make their members members by construction, so
 // this only ever does anything for a named channel.
-func (c *Client) ensureMember(ctx context.Context, channelID string) error {
+func (c *Client) ensureMember(ctx context.Context, channelID string, joinChannels bool) error {
 	_, _, err := c.api.GetChannelMember(ctx, channelID, c.BotUserID(), "")
 	if err == nil {
 		return nil
 	}
 
-	if !c.cfg.JoinChannels {
+	if !joinChannels {
 		return fmt.Errorf("the bot @%s is not a member of channel %s, and routing.join_channels is off: add it to the channel, or turn that setting on",
 			c.BotUsername(), channelID)
 	}

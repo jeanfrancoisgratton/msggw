@@ -19,9 +19,10 @@ import (
 var logoutLocalOnly bool
 
 var logoutCmd = &cobra.Command{
-	Use:   "logout",
+	Use:   "logout NAME",
 	Short: "Unpair the daemon from Google Messages",
-	Long: `Revoke the pairing on the phone and delete the stored session.
+	Long: `Revoke the pairing on the phone and delete the stored session for the user
+named NAME (a "name" entry under "users" in the configuration).
 
 With --local-only the phone is left alone and only the stored session is
 deleted. That is what to use when the pairing has already been revoked from the
@@ -29,7 +30,7 @@ phone, or when the session is too broken to connect with.
 
 The SQLite mappings are not touched: re-pairing the same phone keeps the
 existing Mattermost threads.`,
-	Args:         cobra.NoArgs,
+	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig()
@@ -39,7 +40,12 @@ existing Mattermost threads.`,
 		log := newLogger(cfg)
 		out := cmd.OutOrStdout()
 
-		gmCfg, err := newGMessagesConfig(cfg, log)
+		user, err := findUser(cfg, args[0])
+		if err != nil {
+			return err
+		}
+
+		gmCfg, err := newGMessagesConfig(user, cfg, log)
 		if err != nil {
 			return err
 		}

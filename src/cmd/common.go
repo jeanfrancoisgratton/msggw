@@ -29,18 +29,18 @@ func newLogger(cfg *config.Config) *slog.Logger {
 	return cfg.NewLogger(os.Stderr)
 }
 
-// newSessionStore resolves the Google Messages session reference.
-func newSessionStore(cfg *config.Config) (*gmessages.SessionStore, error) {
-	store, err := secrets.Open(cfg.GMessages.SessionRef, cfg.Vault)
+// newSessionStore resolves a user's Google Messages session reference.
+func newSessionStore(user config.UserConfig, cfg *config.Config) (*gmessages.SessionStore, error) {
+	store, err := secrets.Open(user.GMessages.SessionRef, cfg.Vault)
 	if err != nil {
-		return nil, fmt.Errorf("gmessages.session_ref: %w", err)
+		return nil, fmt.Errorf("users %s: gmessages.session_ref: %w", user.Name, err)
 	}
 	return gmessages.NewSessionStore(store), nil
 }
 
-// newGMessagesConfig assembles what the Google Messages client needs.
-func newGMessagesConfig(cfg *config.Config, log *slog.Logger) (gmessages.Config, error) {
-	session, err := newSessionStore(cfg)
+// newGMessagesConfig assembles what one user's Google Messages client needs.
+func newGMessagesConfig(user config.UserConfig, cfg *config.Config, log *slog.Logger) (gmessages.Config, error) {
+	session, err := newSessionStore(user, cfg)
 	if err != nil {
 		return gmessages.Config{}, err
 	}
@@ -48,12 +48,24 @@ func newGMessagesConfig(cfg *config.Config, log *slog.Logger) (gmessages.Config,
 		Session:      session,
 		Logger:       log,
 		LogLevel:     cfg.SlogLevel(),
-		PingInterval: cfg.PingInterval(),
-		ForceRCS:     cfg.GMessages.ForceRCS,
+		PingInterval: user.GMessages.PingInterval(),
+		ForceRCS:     user.GMessages.ForceRCS,
 	}, nil
 }
 
-// newMattermost builds and authenticates the Mattermost client.
+// findUser looks up a configured user by name, for the CLI commands that
+// target one tenant (pair, logout, status with an argument).
+func findUser(cfg *config.Config, name string) (config.UserConfig, error) {
+	for _, user := range cfg.Users {
+		if user.Name == name {
+			return user, nil
+		}
+	}
+	return config.UserConfig{}, fmt.Errorf("no user named %q in %s", name, cfg.Path())
+}
+
+// newMattermost builds and authenticates the Mattermost client. It is shared
+// by every tenant: one bot account, regardless of how many users are paired.
 func newMattermost(ctx context.Context, cfg *config.Config, log *slog.Logger) (*mattermost.Client, error) {
 	token, err := secrets.OpenString(cfg.Mattermost.TokenRef, cfg.Vault)
 	if err != nil {
@@ -70,7 +82,6 @@ func newMattermost(ctx context.Context, cfg *config.Config, log *slog.Logger) (*
 		InsecureSkipVerify: cfg.Mattermost.InsecureSkipVerify,
 		RequestTimeout:     cfg.RequestTimeout(),
 		ReconnectBackoff:   cfg.ReconnectBackoff(),
-		JoinChannels:       cfg.Routing.JoinChannels,
 		Vault:              cfg.Vault,
 		Logger:             log,
 	})

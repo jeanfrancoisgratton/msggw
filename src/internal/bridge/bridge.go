@@ -33,17 +33,18 @@ const pendingOutboundTTL = time.Hour
 // pruneInterval is how often the pending table is swept.
 const pruneInterval = 15 * time.Minute
 
-// Bridge wires the two sides together.
+// Bridge wires the two sides together, for one tenant.
 type Bridge struct {
-	cfg    *config.Config
+	tenant string
+	user   config.UserConfig
 	log    *slog.Logger
 	db     *storage.DB
 	gm     *gmessages.Client
 	mm     *mattermost.Client
 	router *Router
 
-	// threadMode mirrors routing.thread_per_conversation, read often enough to
-	// be worth not walking the config for.
+	// threadMode mirrors user.routing.thread_per_conversation, read often
+	// enough to be worth not walking the config for.
 	threadMode bool
 
 	mu sync.Mutex
@@ -53,21 +54,23 @@ type Bridge struct {
 	conversationLocks map[string]*sync.Mutex
 }
 
-// New builds a bridge from its already-constructed parts.
-func New(cfg *config.Config, log *slog.Logger, db *storage.DB, gm *gmessages.Client, mm *mattermost.Client) (*Bridge, error) {
-	router, err := NewRouter(cfg.Routing)
+// New builds a bridge from its already-constructed parts, for the tenant
+// named by user.Name.
+func New(user config.UserConfig, log *slog.Logger, db *storage.DB, gm *gmessages.Client, mm *mattermost.Client) (*Bridge, error) {
+	router, err := NewRouter(user.Routing)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Bridge{
-		cfg:               cfg,
+		tenant:            user.Name,
+		user:              user,
 		log:               log,
 		db:                db,
 		gm:                gm,
 		mm:                mm,
 		router:            router,
-		threadMode:        cfg.ThreadPerConversationEnabled(),
+		threadMode:        user.Routing.ThreadPerConversationEnabled(),
 		conversationLocks: make(map[string]*sync.Mutex),
 	}, nil
 }
@@ -189,7 +192,7 @@ func (b *Bridge) logConnection(e gmessages.ConnectionEvent) {
 }
 
 func (b *Bridge) prunePending(ctx context.Context) {
-	removed, err := b.db.PrunePendingOutbound(ctx, pendingOutboundTTL)
+	removed, err := b.db.PrunePendingOutbound(ctx, b.tenant, pendingOutboundTTL)
 	if err != nil {
 		b.log.Warn("pruning unacknowledged outgoing messages", "error", err)
 		return

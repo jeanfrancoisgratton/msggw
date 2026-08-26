@@ -27,7 +27,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 	unlock := b.lockConversation(conversationID)
 	defer unlock()
 
-	stored, err := b.db.GetConversation(ctx, conversationID)
+	stored, err := b.db.GetConversation(ctx, b.tenant, conversationID)
 	if err == nil {
 		return stored, nil
 	}
@@ -41,7 +41,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 	}
 
 	destination, rule := b.router.Route(conv)
-	channelID, err := b.mm.ResolveDestination(ctx, destination)
+	channelID, err := b.mm.ResolveDestination(ctx, destination, b.user.Routing.JoinChannels)
 	if err != nil {
 		return storage.Conversation{}, fmt.Errorf("routing conversation %q via %s: %w", conv.Title(), rule, err)
 	}
@@ -69,7 +69,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 		stored.RootPostID = rootID
 	}
 
-	if err := b.db.SaveConversation(ctx, stored); err != nil {
+	if err := b.db.SaveConversation(ctx, b.tenant, stored); err != nil {
 		return storage.Conversation{}, fmt.Errorf("storing the mapping for conversation %s: %w", conversationID, err)
 	}
 
@@ -78,7 +78,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 		"destination", destination.String(), "channel_id", channelID,
 		"root_post", stored.RootPostID)
 
-	if count := b.cfg.GMessages.BackfillCount; count > 0 {
+	if count := b.user.GMessages.BackfillCount; count > 0 {
 		b.backfill(ctx, stored, count)
 	}
 
@@ -93,7 +93,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 // thread to another channel mid-conversation would strand its history, so a
 // changed routing rule only affects conversations bridged after the change.
 func (b *Bridge) handleConversationUpdate(ctx context.Context, conv gmessages.Conversation) error {
-	stored, err := b.db.GetConversation(ctx, conv.ID)
+	stored, err := b.db.GetConversation(ctx, b.tenant, conv.ID)
 	if errors.Is(err, storage.ErrNotFound) {
 		// Not bridged yet. It will be, when a message arrives; creating a
 		// thread now would open empty threads for every conversation the phone
@@ -118,7 +118,7 @@ func (b *Bridge) handleConversationUpdate(ctx context.Context, conv gmessages.Co
 		stored.Participants = participantsOf(conv)
 	}
 
-	if err := b.db.SaveConversation(ctx, stored); err != nil {
+	if err := b.db.SaveConversation(ctx, b.tenant, stored); err != nil {
 		return fmt.Errorf("updating conversation %s: %w", conv.ID, err)
 	}
 

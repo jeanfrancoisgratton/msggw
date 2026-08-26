@@ -20,14 +20,6 @@
     "token_ref": "env:VAULT_TOKEN"
   },
 
-  "gmessages": {
-    "session_ref": "encoded:/data/gmessages/gmessages.session.enc",
-    "ping_interval_seconds": 60,
-    "force_rcs": true,
-    "mark_read_on_bridge": false,
-    "backfill_count": 0
-  },
-
   "mattermost": {
     "url": "https://mattermost.example.net",
     "token_ref": "file:/etc/msggw/mattermost.token",
@@ -36,39 +28,67 @@
     "request_timeout_seconds": 30
   },
 
-  "routing": {
-    "default": {
-      "type": "channel",
-      "team": "myteam",
-      "channel": "messages"
-    },
-    "rules": [
-      {
-        "name": "family goes to my DMs",
-        "phones": ["+1 514 555-1212", "+15145551213"],
-        "destination": {
-          "type": "direct",
-          "user": "jfgratton"
-        }
-      },
-      {
-        "name": "group chats get their own channel",
-        "groups_only": true,
-        "destination": {
-          "type": "channel",
-          "team": "myteam",
-          "channel": "group-messages"
-        }
-      }
-    ],
-    "thread_per_conversation": true,
-    "post_delivery_status": true,
-    "join_channels": true
-  },
-
   "listener": {
     "port": 0,
     "cert_file": "/etc/msggw/tls/listener.crt",
     "key_file": "/etc/msggw/tls/listener.key"
-  }
+  },
+
+  "users": [
+    {
+      "name": "jfgratton",
+      "gmessages": {
+        "session_ref": "encoded:/data/gmessages/jfgratton.session.enc",
+        "ping_interval_seconds": 60,
+        "force_rcs": true,
+        "mark_read_on_bridge": false,
+        "backfill_count": 0
+      },
+      "routing": {
+        "default": {
+          "type": "channel",
+          "team": "myteam",
+          "channel": "messages"
+        },
+        "rules": [
+          {
+            "name": "family goes to my DMs",
+            "phones": ["+1 514 555-1212", "+15145551213"],
+            "destination": {
+              "type": "direct",
+              "user": "jfgratton"
+            }
+          },
+          {
+            "name": "group chats get their own channel",
+            "groups_only": true,
+            "destination": {
+              "type": "channel",
+              "team": "myteam",
+              "channel": "group-messages"
+            }
+          }
+        ],
+        "thread_per_conversation": true,
+        "post_delivery_status": true,
+        "join_channels": true
+      }
+    },
+    {
+      "name": "kiddo",
+      "gmessages": {
+        "session_ref": "encoded:/data/gmessages/kiddo.session.enc",
+        "force_rcs": true
+      },
+      "routing": {
+        "default": {
+          "type": "direct",
+          "user": "kiddo"
+        },
+        "thread_per_conversation": true,
+        "post_delivery_status": true,
+        "join_channels": true
+      }
+    }
+  ]
 }

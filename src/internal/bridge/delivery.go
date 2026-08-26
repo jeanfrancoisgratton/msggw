@@ -31,7 +31,7 @@ func (b *Bridge) handleStatusUpdate(ctx context.Context, known storage.Message, 
 	newStatus := gmessages.Status(msg.Status)
 	oldStatus := gmessages.Status(known.Status)
 
-	changed, err := b.db.UpdateMessageStatus(ctx, msg.ID, int32(newStatus))
+	changed, err := b.db.UpdateMessageStatus(ctx, b.tenant, msg.ID, int32(newStatus))
 	if err != nil {
 		return fmt.Errorf("recording the status of message %s: %w", msg.ID, err)
 	}
@@ -51,7 +51,7 @@ func (b *Bridge) handleStatusUpdate(ctx context.Context, known storage.Message, 
 // applyDeliveryStatus moves a post's status reaction from the old state to the
 // new one. It is a no-op unless routing.post_delivery_status is on.
 func (b *Bridge) applyDeliveryStatus(ctx context.Context, postID string, newStatus, oldStatus gmessages.Status) error {
-	if !b.cfg.Routing.PostDeliveryStatus || postID == "" {
+	if !b.user.Routing.PostDeliveryStatus || postID == "" {
 		return nil
 	}
 

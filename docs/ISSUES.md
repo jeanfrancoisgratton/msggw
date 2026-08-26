@@ -34,8 +34,11 @@
       back to the phone's first configured SIM. On a dual-SIM phone whose
       conversations do not carry a SIM card, outgoing messages may go out on the
       wrong SIM.
-- [ ] Only QR pairing is implemented. Google-account pairing needs browser
-      cookies.
+- [ ] Pairing is cookie-based (Google account / Gaia) only, since Google
+      retired the QR device-pairing endpoint this bridge used to rely on. The
+      operator has to lift cookies from a signed-in browser session by hand
+      each time — there is no automated way for a headless daemon to obtain
+      them.
 
 ## Untested paths
 

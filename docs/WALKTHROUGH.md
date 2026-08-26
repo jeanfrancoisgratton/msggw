@@ -591,7 +591,7 @@ session lives in a plain file or in Vault.
 Why does the daemon need to be able to *write* these back, not just read them?
 Because the Google Messages session isn't a static credential — libgm refreshes
 its auth token roughly every hour while running, and the refreshed token has to
-be persisted or every restart re-triggers a full QR-code re-pairing. That's why
+be persisted or every restart re-triggers a full re-pairing. That's why
 `config.Validate` specifically rejects `env:` and `literal:` for the session
 reference (`config.go:140`): neither can be written back to, and a session that
 silently can't survive a restart is worse than an error at startup.
@@ -808,7 +808,7 @@ so the condition has to be rechecked in a loop, not assumed true just because
 | wherever `mattermost.token_ref` points | your bot's access token | you |
 
 The session file is the one that actually matters day to day: lose it and you
-have to re-pair from a QR code. It gets rewritten on every auth-token refresh
+have to re-pair with fresh cookies. It gets rewritten on every auth-token refresh
 (roughly hourly while the daemon runs — section 2's step 1 callback), on
 pairing, and on clean shutdown (section 3's defer chain).
 

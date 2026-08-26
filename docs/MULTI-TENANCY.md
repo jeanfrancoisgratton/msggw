@@ -1,12 +1,14 @@
-# Multi-tenancy — a parked design conversation
+# Multi-tenancy — a parked design conversation, now implemented
 
-**Status: the direction is decided — single daemon, multiple tenants (option
-B below) — the query-layer and pairing/config/routing work is not scheduled.**
-This document records the conversation that led there. One piece of
-groundwork is already done: the storage schema (see
-[What's already done](#whats-already-done-storage-schema)) is now
-tenant-shaped, not just tenant-flagged — everything else below is still a
-plan.
+**Status: done.** Single daemon, multiple tenants (option B below) is built:
+config is a `users: []` array, `internal/storage` and `internal/bridge` are
+threaded with a `tenant string`, `pair`/`logout`/`status` take a per-user
+`NAME`, group-chat channels can be auto-created, and each user runs its own
+goroutine independently of the others — see [`docs/CONFIGURATION.md#users`](CONFIGURATION.md#users)
+for the operator-facing shape. This document is kept as the record of the
+conversation and the reasoning that led there; sections below describing
+work as "not started" or "not scheduled" are the historical plan, not the
+current state.
 
 ---
 
@@ -34,9 +36,11 @@ this document is about this option.
 
 Corrections to the original list this conversation started from:
 
-- **Pairing aware of a tenant** — right. `gmessages.session_ref` already
-  supports being a template; `msg-gw pair $USER` mostly needs a CLI argument
-  threaded through to pick which reference to read/write. Cheap.
+- **Pairing aware of a tenant** — right, and cheaper than the "templated
+  `session_ref`" idea floated originally: since each user entry in `users: []`
+  just writes its own literal `session_ref`, no templating was needed at all.
+  `msg-gw pair NAME` looks NAME up in `users` and pairs into that entry's
+  reference directly.
 - **A bot account per user** — this was a mis-speak in the original ask (the
   first draft said "webhook"), corrected to "bot account." Bot-per-user isn't
   actually necessary: the architecture already deliberately uses a bot account
@@ -47,14 +51,15 @@ Corrections to the original list this conversation started from:
   new surface — no per-user Mattermost administration required.
 - **Per-user channel existence check** — true only for the group-chat case.
   DMs need nothing new: a Mattermost DM channel is created implicitly on first
-  message. A *new* Mattermost channel auto-provisioned per user for their
-  group texts would be genuinely new work — today `routing.join_channels`
-  only joins an **existing** channel; there is no channel-creation call
-  anywhere in `internal/mattermost`.
-- **Config shape** — global settings (`mattermost`, `log`, `backend`) stay as
-  they are; a `users: []` array would hold, per entry, roughly what
-  `gmessages` + `routing` hold today. This is a natural generalization of the
-  existing config shape, not a rewrite of it.
+  message. **Done:** `routing.join_channels` now also creates a named channel
+  that does not exist yet (as private — this is personal message content),
+  via `internal/mattermost/channels.go`'s `createChannel`, instead of only
+  joining an existing one.
+- **Config shape** — global settings (`mattermost`, `log`, `backend`,
+  `vault`, `listener`) stay as they are; `users: []` holds, per entry, what
+  `gmessages` + `routing` held at the top level before. Implemented as a
+  clean break rather than keeping the old top-level fields as an implicit
+  single-user fallback — one config shape to document and validate, not two.
 - **`session_ref` per user** — straightforward, same mechanism as pairing
   above.
 
@@ -113,13 +118,14 @@ every row today still implicitly gets `tenant = ''` from the column default,
 and nothing yet asks for a different one. Verified by the full storage test
 suite, including the reopen-after-migration test.
 
-**What's still ahead, not schema-related:** nothing in the Go query layer
-accepts or filters by a tenant value yet — every method in
-`internal/storage` (`GetConversation`, `FindConversationByPhone`,
-`SaveMessage`, ...) needs a `tenant string` parameter threaded through before
-two tenants could safely share one database. The schema will not force
-another migration when that happens; it's purely `internal/storage` and its
-callers in `internal/bridge`.
+**Done, not schema-related:** every method in `internal/storage`
+(`GetConversation`, `FindConversationByPhone`, `SaveMessage`, ...) now takes a
+`tenant string` and filters by it, with every caller in `internal/bridge`
+passing `Bridge.tenant` through. No further migration was needed, as
+predicted — this was purely a `internal/storage`/`internal/bridge` change.
+Tenant isolation itself (two tenants with a contact sharing a phone number, or
+sharing a destination channel) is covered by
+`internal/storage.TestTenantIsolation`.
 
 ## Concurrency and resource cost of N tenants
 
@@ -183,9 +189,42 @@ this needs zero code to work today.
 
 ## Where this stands
 
-Direction chosen (option B); nothing beyond the storage schema is scheduled.
-The natural order of the remaining work: thread a `tenant string` parameter
-through `internal/storage`'s methods and their callers in `internal/bridge`
-→ thread a tenant identifier through pairing (`msg-gw pair $USER`) → extend
-config to a `users: []` shape → decide whether group-chat channel
-auto-provisioning is in scope for a first version or deferred.
+Option B is built, in the order originally planned: `tenant string` threaded
+through `internal/storage` and its callers in `internal/bridge` → a tenant
+argument on `msg-gw pair`/`logout`/`status` → config's `gmessages`/`routing`
+moved from top-level fields into a `users: []` array (a clean break — no
+legacy single-user shape kept alongside it) → group-chat channel
+auto-provisioning included, gated by `routing.join_channels`.
+
+One deliberate behavior change that fell out of this: previously, a daemon
+that could not pair gave up and the whole process exited non-zero. With
+several tenants, one person's broken or not-yet-paired session must not take
+down everyone else's working bridge — so a per-tenant startup failure is now
+logged and that tenant's goroutine simply does not start; the daemon itself,
+and every other tenant, keeps running.
+
+## Client-mode pairing — a second piece of groundwork
+
+Separate from the above, but related: cookie-based pairing (see
+`docs/CONFIGURATION.md#pairing`) needs the operator's own device to sign into
+Google, not the daemon's host — signing in from a VPS's IP, with no prior
+login history for that account, is exactly the profile Google's fraud
+detection flags. "Client mode" moves that step to wherever the operator
+actually is: a client (browser extension, small app, whatever step 3 below
+turns out to be) signs into Google on the operator's own device, then hands
+the resulting session material to the daemon over the network instead of a
+human copying a `cookies.json` by hand.
+
+Planned build order:
+
+1. **The HTTP(S) listener** (`internal/listener`, config's `listener` block —
+   done). Deliberately built before there is anything real to route to it: it
+   only serves `/healthz` today. TLS falls back to plain HTTP, loudly, if
+   `cert_file`/`key_file` are missing or unusable — see
+   `docs/CONFIGURATION.md#listener`.
+2. **Multi-tenancy** (the rest of this document — done). A pairing endpoint
+   now has somewhere real to route to: each `users[]` entry names the tenant
+   whose `session_ref` a client would be registering against.
+3. **The client side** — not started. Still implies a new config block
+   (where the client sends its registration) and a `/pair`-style HTTP handler
+   on the step-1 listener, once its shape is known.

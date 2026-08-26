@@ -89,11 +89,14 @@ go test ./...
 ```text
 msg-gw config sample     print a starting configuration
 msg-gw config check      validate it and resolve every secret it names
-msg-gw pair              pair with Google Messages by QR code
-msg-gw daemon            run the bridge
-msg-gw status            report on the pairing, the bot and the mappings
-msg-gw logout            revoke the pairing and delete the session
+msg-gw pair NAME         pair one user with Google Messages using account cookies
+msg-gw daemon            run the bridge, for every configured user
+msg-gw status [NAME]     report on pairing, the bot and the mappings, for one or every user
+msg-gw logout NAME       revoke one user's pairing and delete their session
 ```
+
+`NAME` matches a `name` entry under `users` in the configuration — one per
+paired phone. A single-person deployment just has one entry.
 
 A first run looks like this:
 
@@ -101,16 +104,17 @@ A first run looks like this:
 msg-gw config sample > /etc/msggw/config.json
 $EDITOR /etc/msggw/config.json
 msg-gw config check
-msg-gw pair              # scan the QR code from Google Messages on the phone
+msg-gw pair jfgratton --cookies-file cookies.json
 msg-gw daemon
 ```
 
-`pair` shows a QR code — on the phone, **Google Messages → Settings → Device pairing → QR code
-scanner**. Each code is valid for 30 seconds and is refreshed automatically. Once the phone
-accepts it, the daemon reconnects with the stored session and prints the conversation list,
+Google retired QR-code device pairing, so `pair` authenticates as your Google account instead.
+Sign into `messages.google.com/web` in a **private** browser window, copy the `SID`, `HSID`,
+`SSID`, `OSID`, `APISID` and `SAPISID` cookies (and `__Secure-1PSIDTS` if present) from devtools
+into a JSON file, and pass it with `--cookies-file` (or pipe the JSON to stdin). `pair` then
+shows an emoji; tapping the matching one on Google Messages on the phone confirms the pairing.
+Once confirmed, the daemon reconnects with the stored session and prints the conversation list,
 which is the phase-1 success criterion proving the session actually works.
-
-On a terminal that cannot render a QR code, `pair --print-url` prints the URL instead.
 
 `status` reports what is on disk and, unless given `--offline`, checks that the Google session
 is still honoured and that the Mattermost token still authenticates.
@@ -456,13 +460,14 @@ The daemon pairs with Google Messages the same way Google Messages for Web or an
 linked device does; the user approves the pairing from Google Messages on the phone. Session
 credentials are then persisted so normal operation needs no repeated interactive
 authentication, with restrictive filesystem permissions and optional support for an external
-secret store (Vault).
+secret store (Vault). Each user in the configuration pairs, and is authenticated, independently
+of every other one — see [MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 
 ```text
-msg-gw pair
+msg-gw pair NAME
 msg-gw daemon
-msg-gw status
-msg-gw logout
+msg-gw status [NAME]
+msg-gw logout NAME
 ```
 
 ### Deployment

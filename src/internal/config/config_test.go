@@ -30,22 +30,30 @@ func TestSampleIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the shipped sample configuration does not load: %v", err)
 	}
+	if len(cfg.Users) == 0 {
+		t.Fatal("the sample has no users")
+	}
 
-	if cfg.Routing.Default.Type != DestChannel {
-		t.Errorf("sample default route type = %q, want %q", cfg.Routing.Default.Type, DestChannel)
+	first := cfg.Users[0]
+	if first.Routing.Default.Type != DestChannel {
+		t.Errorf("sample default route type = %q, want %q", first.Routing.Default.Type, DestChannel)
 	}
-	if len(cfg.Routing.Rules) == 0 {
-		t.Error("the sample has no routing rules, so it does not demonstrate routing")
+	if len(first.Routing.Rules) == 0 {
+		t.Error("the sample's first user has no routing rules, so it does not demonstrate routing")
 	}
-	if !cfg.ThreadPerConversationEnabled() {
+	if !first.Routing.ThreadPerConversationEnabled() {
 		t.Error("the sample turns threads off, which is not the documented default")
 	}
 }
 
+// minimalConfig is the smallest configuration Load accepts: one user, one
+// routing default, a Mattermost URL and token.
 const minimalConfig = `{
-  "gmessages": {"session_ref": "file:/tmp/session.json"},
   "mattermost": {"url": "https://mm.example.net", "token_ref": "env:TOKEN"},
-  "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}
+  "users": [
+    {"name": "u1", "gmessages": {"session_ref": "file:/tmp/session.json"},
+     "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}
+  ]
 }`
 
 func TestLoadAppliesDefaults(t *testing.T) {
@@ -62,7 +70,10 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if want := "/var/lib/msggw/msggw.db"; cfg.Backend.SQLite.Path != want {
 		t.Errorf("Backend.SQLite.Path = %q, want %q", cfg.Backend.SQLite.Path, want)
 	}
-	if !cfg.ThreadPerConversationEnabled() {
+	if len(cfg.Users) != 1 {
+		t.Fatalf("len(Users) = %d, want 1", len(cfg.Users))
+	}
+	if !cfg.Users[0].Routing.ThreadPerConversationEnabled() {
 		t.Error("thread_per_conversation should default to on")
 	}
 	if cfg.RequestTimeout() == 0 || cfg.ReconnectBackoff() == 0 {
@@ -72,9 +83,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	body := `{"state_dir": "/tmp", "state_directory": "/tmp",
-	  "gmessages": {"session_ref": "file:/tmp/s"},
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}`
+	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	             "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}]}`
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
@@ -136,12 +147,12 @@ func TestDestinationValidate(t *testing.T) {
 
 func TestRuleWithoutCriteriaIsRejected(t *testing.T) {
 	body := `{
-	  "gmessages": {"session_ref": "file:/tmp/s"},
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "routing": {
-	    "default": {"type": "channel", "team": "t", "channel": "c"},
-	    "rules": [{"name": "oops", "destination": {"type": "direct", "user": "jf"}}]
-	  }}`
+	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	    "routing": {
+	      "default": {"type": "channel", "team": "t", "channel": "c"},
+	      "rules": [{"name": "oops", "destination": {"type": "direct", "user": "jf"}}]
+	    }}]}`
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
@@ -163,7 +174,7 @@ func TestDatabaseDriverDefaultsToSQLite(t *testing.T) {
 }
 
 func TestPostgresDriverRequiresDSNRef(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`, `"backend": {"driver": "postgres"}, "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"mattermost"`, `"backend": {"driver": "postgres"}, "mattermost"`, 1)
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
@@ -175,8 +186,8 @@ func TestPostgresDriverRequiresDSNRef(t *testing.T) {
 }
 
 func TestPostgresDriverIsAccepted(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`,
-		`"backend": {"driver": "postgres", "postgres": {"dsn_ref": "env:PG_DSN"}}, "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"mattermost"`,
+		`"backend": {"driver": "postgres", "postgres": {"dsn_ref": "env:PG_DSN"}}, "mattermost"`, 1)
 
 	cfg, err := Load(writeConfig(t, body))
 	if err != nil {
@@ -194,8 +205,8 @@ func TestPostgresDriverIsAccepted(t *testing.T) {
 // backend into two nested blocks: an operator can leave both fully filled in
 // and switch storage backends by changing only backend.driver.
 func TestBothBackendBlocksCanCoexist(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`,
-		`"backend": {"driver": "sqlite", "sqlite": {"path": "msggw.db"}, "postgres": {"dsn_ref": "env:PG_DSN"}}, "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"mattermost"`,
+		`"backend": {"driver": "sqlite", "sqlite": {"path": "msggw.db"}, "postgres": {"dsn_ref": "env:PG_DSN"}}, "mattermost"`, 1)
 
 	cfg, err := Load(writeConfig(t, body))
 	if err != nil {
@@ -207,7 +218,7 @@ func TestBothBackendBlocksCanCoexist(t *testing.T) {
 }
 
 func TestUnknownDatabaseDriverIsRejected(t *testing.T) {
-	body := strings.Replace(minimalConfig, `"gmessages"`, `"backend": {"driver": "mysql"}, "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"mattermost"`, `"backend": {"driver": "mysql"}, "mattermost"`, 1)
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
@@ -224,8 +235,8 @@ func TestUnknownDatabaseDriverIsRejected(t *testing.T) {
 // resolve it and then apply the usual StateDir join.
 func TestSQLitePathResolvesReference(t *testing.T) {
 	t.Setenv("SQLITE_PATH", "sqlite/from-env.db")
-	body := strings.Replace(minimalConfig, `"gmessages"`,
-		`"backend": {"sqlite": {"path": "env:SQLITE_PATH"}}, "gmessages"`, 1)
+	body := strings.Replace(minimalConfig, `"mattermost"`,
+		`"backend": {"sqlite": {"path": "env:SQLITE_PATH"}}, "mattermost"`, 1)
 
 	cfg, err := Load(writeConfig(t, body))
 	if err != nil {
@@ -300,13 +311,13 @@ func TestMattermostURLRejectsBadResolvedValue(t *testing.T) {
 
 func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
 	body := `{
-	  "gmessages": {"session_ref": "file:/tmp/s"},
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "routing": {
-	    "default": {"type": "channel", "team": "t", "channel": "c"},
-	    "rules": [{"name": "both", "groups_only": true, "directs_only": true,
-	               "destination": {"type": "direct", "user": "jf"}}]
-	  }}`
+	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	    "routing": {
+	      "default": {"type": "channel", "team": "t", "channel": "c"},
+	      "rules": [{"name": "both", "groups_only": true, "directs_only": true,
+	                 "destination": {"type": "direct", "user": "jf"}}]
+	    }}]}`
 
 	if _, err := Load(writeConfig(t, body)); err == nil {
 		t.Fatal("a rule that is both groups-only and directs-only was accepted")
@@ -339,5 +350,59 @@ func TestListenerPortValidation(t *testing.T) {
 				t.Errorf("listener.port %d: %v", tc.port, err)
 			}
 		})
+	}
+}
+
+// TestUsersMustHaveAtLeastOne covers the clean-break shape: there is no
+// legacy single-user layout to fall back to, so an empty (or missing) users
+// array is rejected rather than silently bridging nobody.
+func TestUsersMustHaveAtLeastOne(t *testing.T) {
+	body := `{"mattermost": {"url": "https://mm", "token_ref": "env:T"}, "users": []}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("an empty users array was accepted")
+	}
+	if !strings.Contains(err.Error(), "users") {
+		t.Errorf("the error does not mention users: %v", err)
+	}
+}
+
+// TestUserNameMustBeUnique covers the tenant identity storage keys on: two
+// users named the same thing would collide in the tenant column.
+func TestUserNameMustBeUnique(t *testing.T) {
+	body := `{
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "users": [
+	    {"name": "dup", "gmessages": {"session_ref": "file:/tmp/a"},
+	     "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}},
+	    {"name": "dup", "gmessages": {"session_ref": "file:/tmp/b"},
+	     "routing": {"default": {"type": "channel", "team": "t", "channel": "b"}}}
+	  ]}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("two users named \"dup\" were accepted")
+	}
+	if !strings.Contains(err.Error(), `"dup"`) {
+		t.Errorf("the error does not name the duplicate: %v", err)
+	}
+}
+
+// TestUserNameIsRequired covers a user entry with no name at all — silently
+// falling back to "" would collide with every other unnamed entry in the
+// tenant column.
+func TestUserNameIsRequired(t *testing.T) {
+	body := `{
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "users": [{"gmessages": {"session_ref": "file:/tmp/a"},
+	    "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}}]}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a user with no name was accepted")
+	}
+	if !strings.Contains(err.Error(), "name is required") {
+		t.Errorf("the error does not explain the problem: %v", err)
 	}
 }

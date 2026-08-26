@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  msggw: WiX source for the .msi installer, built with msitools' `wixl`
+  (Alpine's Windows Installer file toolchain, no Windows/.NET/mono needed;
+  see docker_artifacts/CLAUDE.md, "Builders: winbuilder"). Values wrapped in
+  $(var.X) are filled in by the Makefile's `wixl -D X=value` flags, sourced
+  from ../msggw.json the same way the rest of this Makefile is.
+
+  UpgradeCode and the Component's Guid below are the two identifiers MSI uses
+  to recognize "this is the same product/component across versions", so do
+  NOT regenerate them on a future edit. UpgradeCode is msggw's permanent
+  Windows Installer identity: change it and every future release stops being
+  recognized as an upgrade of this one, so a machine ends up with two
+  side-by-side installs instead of one replacing the other. The Component
+  Guid must stay paired with this exact (install path, key file) combination
+  for the same reason, and only needs to change if the installed path or the
+  KeyPath file itself changes. Product/@Id='*' is deliberately different:
+  wixl mints a fresh ProductCode every build, which is correct, since that
+  one identifies this specific build, not the product line.
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <Product Name='$(var.ProductName)' Id='*' UpgradeCode='3D01AAEE-FA1B-4847-872D-36E28C357BC5'
+    Language='1033' Codepage='1252' Version='$(var.ProductVersion)' Manufacturer='$(var.Manufacturer)'>
+
+    <Package Id='*' Keywords='Installer' Description='$(var.Description)'
+      Manufacturer='$(var.Manufacturer)' InstallerVersion='200' Languages='1033'
+      Compressed='yes' SummaryCodepage='1252' InstallScope='perMachine' />
+
+    <!-- Expands to the Upgrade table + RemoveExistingProducts sequencing:
+         installing a newer msggw.msi replaces the old install instead of
+         sitting beside it, and installing an older one is refused outright. -->
+    <MajorUpgrade DowngradeErrorMessage='A newer version of $(var.ProductName) is already installed.' />
+
+    <Media Id='1' Cabinet='product.cab' EmbedCab='yes' />
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFilesFolder'>
+        <Directory Id='INSTALLDIR' Name='$(var.ProductName)'>
+          <Component Id='MainExecutable' Guid='29C8885A-710B-4EEE-84DE-019689CC7296'>
+            <File Id='MainEXE' Name='$(var.BinaryName).exe'
+              Source='$(var.Staging)/$(var.BinaryName).exe' KeyPath='yes' />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id='Complete' Level='1'>
+      <ComponentRef Id='MainExecutable' />
+    </Feature>
+  </Product>
+</Wix>

@@ -18,20 +18,22 @@ import (
 
 	"msggw/internal/config"
 	"msggw/internal/gmessages"
+	"msggw/internal/storage"
 )
 
 var statusOffline bool
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status [NAME]",
 	Short: "Report on the pairing, the Mattermost account and the stored mappings",
-	Long: `Report the daemon's state: whether a Google Messages session is stored, which
-phone it is paired with, whether the Mattermost token works, and which
-conversations are currently bridged.
+	Long: `Report the daemon's state: whether the Mattermost bot token works, and, for
+every configured user (or just NAME, if given) — whether a Google Messages
+session is stored, which phone it is paired with, and which conversations are
+currently bridged.
 
-By default the Mattermost account is checked over the network. Use --offline to
-report only on what is on disk.`,
-	Args:         cobra.NoArgs,
+By default the Mattermost account and each session are checked over the
+network. Use --offline to report only on what is on disk.`,
+	Args:         cobra.MaximumNArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig()
@@ -48,16 +50,50 @@ report only on what is on disk.`,
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "configuration : %s\n\n", cfg.Path())
 
-		reportSession(ctx, out, cfg, log)
-		fmt.Fprintln(out)
+		users := cfg.Users
+		if len(args) == 1 {
+			user, err := findUser(cfg, args[0])
+			if err != nil {
+				return err
+			}
+			users = []config.UserConfig{user}
+		}
+
 		reportMattermost(ctx, out, cfg, log)
 		fmt.Fprintln(out)
-		return reportMappings(ctx, out, cfg)
+
+		if cfg.Backend.Driver == config.DatabaseDriverPostgres {
+			fmt.Fprintf(out, "database       : postgres (%s)\n", cfg.Backend.Postgres.DSNRef)
+		} else if path, err := cfg.SQLitePath(); err != nil {
+			fmt.Fprintf(out, "database       : MISCONFIGURED — %v\n", err)
+		} else {
+			fmt.Fprintf(out, "database       : %s\n", path)
+		}
+
+		db, err := openStorage(ctx, cfg)
+		if err != nil {
+			fmt.Fprintf(out, "                 UNUSABLE — %v\n", err)
+			return nil
+		}
+		defer db.Close()
+
+		for i, user := range users {
+			if i > 0 {
+				fmt.Fprintln(out)
+			}
+			fmt.Fprintf(out, "--- %s ---\n", user.Name)
+			reportSession(ctx, out, user, cfg, log)
+			fmt.Fprintln(out)
+			if err := reportMappings(ctx, out, db, user.Name); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
-func reportSession(ctx context.Context, out io.Writer, cfg *config.Config, log *slog.Logger) {
-	gmCfg, err := newGMessagesConfig(cfg, log)
+func reportSession(ctx context.Context, out io.Writer, user config.UserConfig, cfg *config.Config, log *slog.Logger) {
+	gmCfg, err := newGMessagesConfig(user, cfg, log)
 	if err != nil {
 		fmt.Fprintf(out, "google messages: MISCONFIGURED — %v\n", err)
 		return
@@ -66,7 +102,7 @@ func reportSession(ctx context.Context, out io.Writer, cfg *config.Config, log *
 
 	client, err := gmessages.New(gmCfg)
 	if errors.Is(err, gmessages.ErrNotPaired) {
-		fmt.Fprintf(out, "                 NOT PAIRED — run \"msg-gw pair\"\n")
+		fmt.Fprintf(out, "                 NOT PAIRED — run \"msg-gw pair %s\"\n", user.Name)
 		return
 	}
 	if err != nil {
@@ -109,7 +145,6 @@ func reportMattermost(ctx context.Context, out io.Writer, cfg *config.Config, lo
 		return
 	}
 	fmt.Fprintf(out, "mattermost     : %s\n", url)
-	fmt.Fprintf(out, "                 default route %s\n", cfg.Routing.Default.String())
 
 	if statusOffline {
 		fmt.Fprintf(out, "                 not contacted (--offline)\n")
@@ -124,30 +159,16 @@ func reportMattermost(ctx context.Context, out io.Writer, cfg *config.Config, lo
 	fmt.Fprintf(out, "                 authenticated as @%s\n", client.BotUsername())
 }
 
-func reportMappings(ctx context.Context, out io.Writer, cfg *config.Config) error {
-	db, err := openStorage(ctx, cfg)
-	if err != nil {
-		fmt.Fprintf(out, "database       : UNUSABLE — %v\n", err)
-		return nil
-	}
-	defer db.Close()
-
-	conversations, err := db.ListConversations(ctx)
+func reportMappings(ctx context.Context, out io.Writer, db *storage.DB, tenant string) error {
+	conversations, err := db.ListConversations(ctx, tenant)
 	if err != nil {
 		return err
 	}
-	messages, err := db.CountMessages(ctx)
+	messages, err := db.CountMessages(ctx, tenant)
 	if err != nil {
 		return err
 	}
 
-	if cfg.Backend.Driver == config.DatabaseDriverPostgres {
-		fmt.Fprintf(out, "database       : postgres (%s)\n", cfg.Backend.Postgres.DSNRef)
-	} else if path, err := cfg.SQLitePath(); err != nil {
-		fmt.Fprintf(out, "database       : MISCONFIGURED — %v\n", err)
-	} else {
-		fmt.Fprintf(out, "database       : %s\n", path)
-	}
 	fmt.Fprintf(out, "                 %d conversations bridged, %d messages mapped\n",
 		len(conversations), messages)
 

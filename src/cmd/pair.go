@@ -28,9 +28,12 @@ var pairCookiesFile string
 var requiredCookies = []string{"SID", "HSID", "SSID", "OSID", "APISID", "SAPISID"}
 
 var pairCmd = &cobra.Command{
-	Use:   "pair",
+	Use:   "pair NAME",
 	Short: "Pair the daemon with Google Messages on your phone",
 	Long: `Pair the daemon with the Google Messages app on your Android phone.
+
+NAME must match one of the "name" entries under "users" in the configuration —
+this is which tenant the pairing is stored against.
 
 Google killed QR-code device pairing, so this authenticates as your Google
 account instead. Sign into https://messages.google.com/web in a private
@@ -43,9 +46,9 @@ SAPISID cookies (and __Secure-1PSIDTS if present) into a JSON file:
 Pass that file with --cookies-file, or pipe it to stdin. The daemon then shows
 an emoji; tap the matching one on Google Messages on the phone to confirm.
 
-Once paired, the session is stored at gmessages.session_ref and the daemon can
-reconnect without pairing again.`,
-	Args:         cobra.NoArgs,
+Once paired, the session is stored at that user's gmessages.session_ref and the
+daemon can reconnect without pairing again.`,
+	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig()
@@ -54,7 +57,12 @@ reconnect without pairing again.`,
 		}
 		log := newLogger(cfg)
 
-		gmCfg, err := newGMessagesConfig(cfg, log)
+		user, err := findUser(cfg, args[0])
+		if err != nil {
+			return err
+		}
+
+		gmCfg, err := newGMessagesConfig(user, cfg, log)
 		if err != nil {
 			return err
 		}

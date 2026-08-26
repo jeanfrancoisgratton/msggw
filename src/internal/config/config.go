@@ -116,9 +116,11 @@ func (c *Config) applyDefaults() {
 	if c.Mattermost.RequestTimeoutSeconds == 0 {
 		c.Mattermost.RequestTimeoutSeconds = 30
 	}
-	if c.Routing.ThreadPerConversation == nil {
-		enabled := true
-		c.Routing.ThreadPerConversation = &enabled
+	for i := range c.Users {
+		if c.Users[i].Routing.ThreadPerConversation == nil {
+			enabled := true
+			c.Users[i].Routing.ThreadPerConversation = &enabled
+		}
 	}
 }
 
@@ -139,13 +141,45 @@ func (c *Config) Validate() error {
 			c.Backend.Driver, DatabaseDriverSQLite, DatabaseDriverPostgres))
 	}
 
-	if c.GMessages.SessionRef == "" {
-		problems = append(problems, errors.New("gmessages.session_ref is required"))
-	} else if strings.HasPrefix(c.GMessages.SessionRef, "env:") ||
-		strings.HasPrefix(c.GMessages.SessionRef, "literal:") {
-		problems = append(problems, fmt.Errorf(
-			"gmessages.session_ref is %q, but the session has to be written back when its auth token is refreshed: use file:, encoded: or vault:",
-			c.GMessages.SessionRef))
+	if len(c.Users) == 0 {
+		problems = append(problems, errors.New("users must have at least one entry"))
+	}
+	seenNames := make(map[string]bool, len(c.Users))
+	for i, user := range c.Users {
+		label := fmt.Sprintf("users[%d]", i)
+		if user.Name != "" {
+			label = fmt.Sprintf("users[%d] (%s)", i, user.Name)
+		}
+
+		if user.Name == "" {
+			problems = append(problems, fmt.Errorf("%s: name is required", label))
+		} else if seenNames[user.Name] {
+			problems = append(problems, fmt.Errorf("%s: name %q is used by more than one user", label, user.Name))
+		} else {
+			seenNames[user.Name] = true
+		}
+
+		if user.GMessages.SessionRef == "" {
+			problems = append(problems, fmt.Errorf("%s: gmessages.session_ref is required", label))
+		} else if strings.HasPrefix(user.GMessages.SessionRef, "env:") ||
+			strings.HasPrefix(user.GMessages.SessionRef, "literal:") {
+			problems = append(problems, fmt.Errorf(
+				"%s: gmessages.session_ref is %q, but the session has to be written back when its auth token is refreshed: use file:, encoded: or vault:",
+				label, user.GMessages.SessionRef))
+		}
+
+		if err := user.Routing.Default.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("%s: routing.default: %w", label, err))
+		}
+		for j, rule := range user.Routing.Rules {
+			ruleLabel := fmt.Sprintf("%s: routing.rules[%d]", label, j)
+			if rule.Name != "" {
+				ruleLabel = fmt.Sprintf("%s: routing.rules[%d] (%s)", label, j, rule.Name)
+			}
+			if err := rule.validate(); err != nil {
+				problems = append(problems, fmt.Errorf("%s: %w", ruleLabel, err))
+			}
+		}
 	}
 
 	if c.Mattermost.URL == "" {
@@ -158,19 +192,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Mattermost.TokenRef == "" {
 		problems = append(problems, errors.New("mattermost.token_ref is required"))
-	}
-
-	if err := c.Routing.Default.Validate(); err != nil {
-		problems = append(problems, fmt.Errorf("routing.default: %w", err))
-	}
-	for i, rule := range c.Routing.Rules {
-		label := fmt.Sprintf("routing.rules[%d]", i)
-		if rule.Name != "" {
-			label = fmt.Sprintf("routing.rules[%d] (%s)", i, rule.Name)
-		}
-		if err := rule.validate(); err != nil {
-			problems = append(problems, fmt.Errorf("%s: %w", label, err))
-		}
 	}
 
 	if c.Listener.Port != 0 && (c.Listener.Port < 1 || c.Listener.Port > 65535) {
@@ -261,11 +282,6 @@ func (r Rule) validate() error {
 	return errors.Join(problems...)
 }
 
-// ThreadPerConversationEnabled reads the tri-state flag after defaults.
-func (c *Config) ThreadPerConversationEnabled() bool {
-	return c.Routing.ThreadPerConversation == nil || *c.Routing.ThreadPerConversation
-}
-
 // SQLitePath resolves backend.sqlite.path — which may be a plain path or a
 // secret reference — and, if the result is relative, joins it under
 // StateDir. Reaching out to Vault, a file or the environment means this does
@@ -305,8 +321,8 @@ func (c *Config) ReconnectBackoff() time.Duration {
 }
 
 // PingInterval is how often libgm should ping the phone; 0 keeps its default.
-func (c *Config) PingInterval() time.Duration {
-	return time.Duration(c.GMessages.PingIntervalSeconds) * time.Second
+func (g GMessagesConfig) PingInterval() time.Duration {
+	return time.Duration(g.PingIntervalSeconds) * time.Second
 }
 
 // SlogLevel maps the configured level onto slog's.

@@ -33,21 +33,21 @@ type Message struct {
 }
 
 // SaveMessage records a message mapping, or updates the mapping already there.
-func (db *DB) SaveMessage(ctx context.Context, msg Message) error {
+func (db *DB) SaveMessage(ctx context.Context, tenant string, msg Message) error {
 	if msg.CreatedAt.IsZero() {
 		msg.CreatedAt = time.Now()
 	}
 	_, err := db.execContext(ctx, `
 		INSERT INTO messages (
-			gmessages_message_id, mattermost_post_id, conversation_id,
+			tenant, gmessages_message_id, mattermost_post_id, conversation_id,
 			direction, status, created_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(tenant, gmessages_message_id) DO UPDATE SET
 			mattermost_post_id = excluded.mattermost_post_id,
 			conversation_id    = excluded.conversation_id,
 			direction          = excluded.direction,
 			status             = excluded.status`,
-		msg.ID, msg.PostID, msg.ConversationID, msg.Direction, msg.Status,
+		tenant, msg.ID, msg.PostID, msg.ConversationID, msg.Direction, msg.Status,
 		msg.CreatedAt.Unix())
 	return err
 }
@@ -57,11 +57,11 @@ func (db *DB) SaveMessage(ctx context.Context, msg Message) error {
 //
 // This is the deduplication check docs/SOLUTION.md calls for: a reconnect can
 // replay events, and a message that is already mapped must not be posted twice.
-func (db *DB) GetMessage(ctx context.Context, id string) (Message, error) {
+func (db *DB) GetMessage(ctx context.Context, tenant, id string) (Message, error) {
 	row := db.queryRowContext(ctx, `
 		SELECT gmessages_message_id, mattermost_post_id, conversation_id,
 		       direction, status, created_at
-		FROM messages WHERE gmessages_message_id = ?`, id)
+		FROM messages WHERE tenant = ? AND gmessages_message_id = ?`, tenant, id)
 
 	var (
 		msg       Message
@@ -82,14 +82,14 @@ func (db *DB) GetMessage(ctx context.Context, id string) (Message, error) {
 // GetMessageByPost is the reverse lookup: which Google Messages message a
 // Mattermost post stands for. It backs replies typed in Mattermost against a
 // specific bridged message.
-func (db *DB) GetMessageByPost(ctx context.Context, postID string) (Message, error) {
+func (db *DB) GetMessageByPost(ctx context.Context, tenant, postID string) (Message, error) {
 	if postID == "" {
 		return Message{}, ErrNotFound
 	}
 	row := db.queryRowContext(ctx, `
 		SELECT gmessages_message_id, mattermost_post_id, conversation_id,
 		       direction, status, created_at
-		FROM messages WHERE mattermost_post_id = ? LIMIT 1`, postID)
+		FROM messages WHERE tenant = ? AND mattermost_post_id = ? LIMIT 1`, tenant, postID)
 
 	var (
 		msg       Message
@@ -110,10 +110,10 @@ func (db *DB) GetMessageByPost(ctx context.Context, postID string) (Message, err
 // UpdateMessageStatus records a new delivery status and reports whether it
 // actually changed. The caller uses that to avoid re-decorating a post with a
 // status it already shows, since the phone repeats status updates freely.
-func (db *DB) UpdateMessageStatus(ctx context.Context, id string, status int32) (changed bool, err error) {
+func (db *DB) UpdateMessageStatus(ctx context.Context, tenant, id string, status int32) (changed bool, err error) {
 	result, err := db.execContext(ctx,
-		`UPDATE messages SET status = ? WHERE gmessages_message_id = ? AND status != ?`,
-		status, id, status)
+		`UPDATE messages SET status = ? WHERE tenant = ? AND gmessages_message_id = ? AND status != ?`,
+		status, tenant, id, status)
 	if err != nil {
 		return false, err
 	}
@@ -123,14 +123,14 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, id string, status int32) 
 
 // AddPendingOutbound records that a Mattermost post has been sent to the phone
 // under a temporary ID, before Google Messages has assigned it a real one.
-func (db *DB) AddPendingOutbound(ctx context.Context, tmpID, postID, conversationID string) error {
+func (db *DB) AddPendingOutbound(ctx context.Context, tenant, tmpID, postID, conversationID string) error {
 	_, err := db.execContext(ctx, `
-		INSERT INTO outbound_pending (tmp_id, mattermost_post_id, conversation_id, created_at)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO outbound_pending (tenant, tmp_id, mattermost_post_id, conversation_id, created_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(tmp_id) DO UPDATE SET
 			mattermost_post_id = excluded.mattermost_post_id,
 			conversation_id    = excluded.conversation_id`,
-		tmpID, postID, conversationID, time.Now().Unix())
+		tenant, tmpID, postID, conversationID, time.Now().Unix())
 	return err
 }
 
@@ -138,6 +138,9 @@ func (db *DB) AddPendingOutbound(ctx context.Context, tmpID, postID, conversatio
 // from and forgets it. It returns ErrNotFound for a tmpID this daemon did not
 // issue — which is how a message sent from the phone itself, or from another
 // paired device, is told apart from one the bridge sent.
+//
+// tmp_id is a uuid.NewString() value, already globally unique regardless of
+// tenant, so no tenant qualifier is needed here for correctness.
 func (db *DB) TakePendingOutbound(ctx context.Context, tmpID string) (postID string, err error) {
 	if tmpID == "" {
 		return "", ErrNotFound
@@ -162,23 +165,23 @@ func (db *DB) TakePendingOutbound(ctx context.Context, tmpID string) (postID str
 	return postID, tx.Commit()
 }
 
-// PrunePendingOutbound drops entries older than maxAge. A message the phone
-// never acknowledged leaves its temporary ID behind for good, so without this
-// the table only ever grows.
-func (db *DB) PrunePendingOutbound(ctx context.Context, maxAge time.Duration) (int64, error) {
+// PrunePendingOutbound drops tenant's entries older than maxAge. A message the
+// phone never acknowledged leaves its temporary ID behind for good, so without
+// this the table only ever grows.
+func (db *DB) PrunePendingOutbound(ctx context.Context, tenant string, maxAge time.Duration) (int64, error) {
 	result, err := db.execContext(ctx,
-		`DELETE FROM outbound_pending WHERE created_at <= ?`,
-		time.Now().Add(-maxAge).Unix())
+		`DELETE FROM outbound_pending WHERE tenant = ? AND created_at <= ?`,
+		tenant, time.Now().Add(-maxAge).Unix())
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-// CountMessages returns how many message mappings are stored, for the status
-// command.
-func (db *DB) CountMessages(ctx context.Context) (int, error) {
+// CountMessages returns how many message mappings are stored for tenant, for
+// the status command.
+func (db *DB) CountMessages(ctx context.Context, tenant string) (int, error) {
 	var count int
-	err := db.queryRowContext(ctx, `SELECT COUNT(*) FROM messages`).Scan(&count)
+	err := db.queryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE tenant = ?`, tenant).Scan(&count)
 	return count, err
 }

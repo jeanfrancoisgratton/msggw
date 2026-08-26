@@ -6,9 +6,12 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
+	hftx "github.com/jeanfrancoisgratton/helperFunctions/v5/terminalfx"
 	"github.com/spf13/cobra"
 )
 
@@ -18,9 +21,8 @@ var configPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "message-gateway",
-	Short:   "Google Messages (SMS/MMS/RCS) to Mattermost gateway",
-	Version: "0.6.0 (2026.08.23), Go version = " + runtime.Version(),
+	Use:   "message-gateway",
+	Short: "Google Messages (SMS/MMS/RCS) to Mattermost gateway",
 	Long: `message-gateway bridges the SMS, MMS and RCS conversations of an Android phone
 running Google Messages into a Mattermost server, and sends replies typed in
 Mattermost back out through Google Messages.
@@ -35,6 +37,14 @@ Getting started:
   message-gateway config check
   message-gateway pair
   message-gateway daemon`,
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Shows the software version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(hftx.White("message-gateway 0.6.0 (2026.08.23), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+	},
 }
 
 func Execute() {
@@ -57,4 +67,5 @@ func init() {
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(versionCmd)
 }

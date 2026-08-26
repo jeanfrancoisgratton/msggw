@@ -25,7 +25,7 @@ func (b *Bridge) handleIncomingMessage(ctx context.Context, msg gmessages.Messag
 	// The echo of one of our own sends. Its temporary ID is the only thing
 	// tying the phone's message ID back to the Mattermost post it came from.
 	if postID, err := b.db.TakePendingOutbound(ctx, msg.TmpID); err == nil {
-		if err := b.db.SaveMessage(ctx, storage.Message{
+		if err := b.db.SaveMessage(ctx, b.tenant, storage.Message{
 			ID:             msg.ID,
 			PostID:         postID,
 			ConversationID: msg.ConversationID,
@@ -43,7 +43,7 @@ func (b *Bridge) handleIncomingMessage(ctx context.Context, msg gmessages.Messag
 	}
 
 	// A message already bridged. Anything new about it is a status change.
-	if known, err := b.db.GetMessage(ctx, msg.ID); err == nil {
+	if known, err := b.db.GetMessage(ctx, b.tenant, msg.ID); err == nil {
 		return b.handleStatusUpdate(ctx, known, msg)
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return fmt.Errorf("looking up message %s: %w", msg.ID, err)
@@ -77,11 +77,11 @@ func (b *Bridge) handleIncomingMessage(ctx context.Context, msg gmessages.Messag
 		return err
 	}
 
-	if err := b.db.TouchConversation(ctx, conv.ID, msg.Timestamp); err != nil {
+	if err := b.db.TouchConversation(ctx, b.tenant, conv.ID, msg.Timestamp); err != nil {
 		b.log.Warn("could not record conversation activity", "conversation", conv.ID, "error", err)
 	}
 
-	if b.cfg.GMessages.MarkReadOnBridge && !msg.IsFromMe {
+	if b.user.GMessages.MarkReadOnBridge && !msg.IsFromMe {
 		if err := b.gm.MarkRead(ctx, msg.ConversationID, msg.ID); err != nil {
 			b.log.Warn("could not mark a conversation read on the phone",
 				"conversation", msg.ConversationID, "error", err)
@@ -115,7 +115,7 @@ func (b *Bridge) postMessage(ctx context.Context, conv storage.Conversation, msg
 		direction = storage.DirectionOut
 	}
 
-	if err := b.db.SaveMessage(ctx, storage.Message{
+	if err := b.db.SaveMessage(ctx, b.tenant, storage.Message{
 		ID:             msg.ID,
 		PostID:         postID,
 		ConversationID: conv.ID,

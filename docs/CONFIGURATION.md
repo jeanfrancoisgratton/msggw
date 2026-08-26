@@ -30,14 +30,16 @@ than a silently-applied default.
   - [Storage backend](#storage-backend)
 - [`log`](#log)
 - [`vault`](#vault)
-- [`gmessages`](#gmessages)
-- [Pairing](#pairing)
 - [`mattermost`](#mattermost)
-- [`routing`](#routing)
-  - [Destinations](#destinations)
-  - [Rules](#rules)
-  - [Threads](#threads)
-  - [Delivery status](#delivery-status)
+- [`listener`](#listener)
+- [`users`](#users)
+  - [`gmessages`](#gmessages)
+  - [Pairing](#pairing)
+  - [`routing`](#routing)
+    - [Destinations](#destinations)
+    - [Rules](#rules)
+    - [Threads](#threads)
+    - [Delivery status](#delivery-status)
 - [Worked examples](#worked-examples)
 
 ---
@@ -61,7 +63,7 @@ string would otherwise be indistinguishable from a token accidentally pasted
 into a world-readable file.
 
 **Four settings are always a reference**, because they hold a credential:
-`gmessages.session_ref`, `mattermost.token_ref`, `backend.postgres.dsn_ref`
+`users[].gmessages.session_ref`, `mattermost.token_ref`, `backend.postgres.dsn_ref`
 and `vault.token_ref`. Elsewhere, a reference is optional: `backend.sqlite.path`,
 `mattermost.url`, `vault.address`, and every routing [destination](#destinations)
 field (`team`, `channel`, `channel_id`, `user`, `users`) normally take a plain
@@ -71,9 +73,9 @@ exactly as before: it is only treated as a reference when its prefix, up to
 the first `:`, matches one of the schemes above (so a `https://...` URL, an
 ordinary filesystem path, or a bare username all pass through untouched).
 
-**Writability matters for one setting only.** `gmessages.session_ref` has to be
-writable, because `libgm` refreshes its Google auth token roughly hourly and the
-refreshed session must be persisted; a session behind `env:` or `literal:` would
+**Writability matters for one setting only.** `users[].gmessages.session_ref` has
+to be writable, because `libgm` refreshes its Google auth token roughly hourly and
+the refreshed session must be persisted; a session behind `env:` or `literal:` would
 force a re-pairing on every restart. The configuration rejects those two schemes
 for that field.
 
@@ -95,6 +97,7 @@ truncated session behind.
 |---|---|---|---|
 | `state_dir` | string | `/var/lib/msggw` | Everything persisted that is not a secret. |
 | `backend` | object | — | Storage backend selection and settings; see [Storage backend](#storage-backend). |
+| `users` | list of objects | — | **Required, at least one entry.** One tenant per entry — see [`users`](#users). |
 
 ### Storage backend
 
@@ -161,8 +164,8 @@ given as a [secret reference](#secret-references), not a plain string:
 
 The resolved value is the DSN itself, e.g.
 `postgres://user:pass@host:5432/msggw?sslmode=disable`. `backend.postgres.dsn_ref`
-does not need to be writable — unlike `gmessages.session_ref` — since the
-daemon never rewrites it.
+does not need to be writable — unlike a user's `gmessages.session_ref` — since
+the daemon never rewrites it.
 
 ---
 
@@ -199,66 +202,6 @@ mount is `secrets` and the path is `msggw`.
 
 ---
 
-## `gmessages`
-
-| Key | Type | Default | Meaning |
-|---|---|---|---|
-| `session_ref` | secret reference | — | **Required.** Where the paired-device session lives. Must be writable. |
-| `ping_interval_seconds` | int | `60` | How often to ping the phone. `libgm` ignores anything outside 60–14400. |
-| `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
-| `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
-| `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged. `0` disables backfill. |
-
----
-
-## Pairing
-
-Pairing itself is not a config setting — it is a separate, one-time step:
-
-```bash
-message-gateway pair
-```
-
-This shows a QR code, scanned in Google Messages on the phone (**Settings →
-Device pairing → QR code scanner**). Add `--print-url` for a terminal that
-cannot render the QR code; `--attempts` controls how many codes (each valid
-30 seconds) are shown before giving up. On success, the session is written to
-`gmessages.session_ref`, and `message-gateway daemon` needs no further
-interactive step to use it.
-
-**Checking whether pairing has already happened** — a session at
-`gmessages.session_ref` *is* the pairing state; there is no separate flag.
-`message-gateway status` reads only that reference and reports `NOT PAIRED —
-run "msg-gw pair"` or `paired with phone <id>` (`--offline` skips the network
-round-trip that confirms Google still honours the session). Equivalently,
-checking for a non-empty file (or secret) at that reference works directly —
-an empty file counts as "not paired," the same as a missing one (this is what
-`message-gateway logout --local-only` leaves behind).
-
-**Restarting does not re-trigger pairing.** `daemon` loads the stored session
-on startup and reconnects with it; it never launches the QR flow itself. As
-long as `gmessages.session_ref` sits on storage that survives a restart — the
-same volume-mount caveat as [`backend.sqlite.path`](#storage-backend) — a
-restarted container reconnects silently.
-
-**Pairing in an unattended container.** If no session exists yet, `daemon`
-does not fail immediately: it retries for 5 attempts, 60 seconds apart
-(logging a `warn` line each time), before giving up for good — a four-minute
-window to pair from a separate step:
-
-```bash
-docker exec -it msggw message-gateway pair
-docker logs -f msggw
-```
-
-The pairing URL itself is also logged, at `info`, once per QR code shown
-(including refreshed ones) — specifically so it is visible through `docker
-logs` even without an interactive terminal attached to `pair`. It is a
-short-lived (~30 second) bearer credential, so treat wherever your logs end
-up with the same care as any other secret in transit.
-
----
-
 ## `mattermost`
 
 | Key | Type | Default | Meaning |
@@ -274,15 +217,139 @@ push messages one way; the bot account is what makes replies, file uploads,
 post edits and reactions possible. See [SOLUTION.md](SOLUTION.md).
 
 Creating the account, in Mattermost: **System Console → Integrations → Bot
-Accounts → Add Bot Account**, then create an access token for it. If
-`routing.join_channels` is off, add the bot to every channel you route to.
+Accounts → Add Bot Account**, then create an access token for it. If a user's
+`routing.join_channels` is off, add the bot to every channel that user routes
+to.
+
+There is exactly one bot account and one Mattermost connection, shared by
+every user in [`users`](#users) — not one per tenant.
 
 ---
 
-## `routing`
+## `listener`
 
-This is where you decide **where messages end up in Mattermost**. Nothing about
-the layout is hard-coded.
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `port` | int | `0` | Port the HTTP(S) listener binds to, on all interfaces. `0` disables the listener entirely — there is no separate enable flag. |
+| `cert_file` | string | — | TLS certificate, as a plain filesystem path (not a [secret reference](#secret-references)). |
+| `key_file` | string | — | TLS private key, as a plain filesystem path. |
+
+This listener is groundwork for "client mode" pairing (a client running on the
+operator's own device registers pairing material with the daemon, so the
+device doing the actual Google sign-in is never the daemon's own host —
+see `docs/MULTI-TENANCY.md`); today it only serves a `/healthz` check, so
+there is nothing to route to it yet in normal use.
+
+**TLS falls back to plain HTTP, loudly, rather than refusing to start.** If
+`cert_file`/`key_file` are unset, unreadable, or otherwise fail to load as a
+key pair, the listener still starts — on plain HTTP — but logs a `warn` line
+saying exactly why, every time. This is deliberate: a config problem here
+should not take the whole daemon down, but silently serving something that
+will eventually carry pairing cookies over an unencrypted port is the kind of
+mistake that must never happen quietly. Check the daemon's logs after
+changing anything under `listener` to confirm TLS is actually in effect.
+
+---
+
+## `users`
+
+`users` is a list, one entry per tenant — one paired phone, with its own
+session and its own routing. There is always at least one; a single-person
+deployment is just a `users` array of length one, not a separate shape.
+Everything else in this file (`mattermost`, `backend`, `log`, `vault`,
+`listener`) is shared across every entry.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `name` | string | — | **Required, and unique among `users`.** Identifies this tenant in `msg-gw pair NAME`, in `status` output, and as the tenant column's value in storage. |
+| `gmessages` | object | — | This user's Google Messages session and behaviour; see [`gmessages`](#gmessages). |
+| `routing` | object | — | This user's routing; see [`routing`](#routing). |
+
+```json
+"users": [
+  { "name": "jfgratton", "gmessages": { "session_ref": "..." }, "routing": { "..." } },
+  { "name": "kiddo",     "gmessages": { "session_ref": "..." }, "routing": { "..." } }
+]
+```
+
+Each user runs in its own goroutine once the daemon starts, entirely
+independently of the others: one person's session being unpaired, revoked, or
+otherwise broken is logged and that user's bridge simply does not start — it
+does not stop any other user's bridge, or the daemon as a whole.
+
+### `gmessages`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `session_ref` | secret reference | — | **Required.** Where this user's paired-device session lives. Must be writable. |
+| `ping_interval_seconds` | int | `60` | How often to ping the phone. `libgm` ignores anything outside 60–14400. |
+| `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
+| `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
+| `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged. `0` disables backfill. |
+
+### Pairing
+
+Pairing itself is not a config setting — it is a separate, one-time step, once
+per user:
+
+```bash
+message-gateway pair NAME --cookies-file cookies.json
+```
+
+`NAME` must match one of the `name` entries under `users`.
+
+Google retired QR-code device pairing, so this authenticates as your Google
+account instead. Sign into `https://messages.google.com/web` in a **private**
+browser window, open devtools, and copy the `SID`, `HSID`, `SSID`, `OSID`,
+`APISID` and `SAPISID` cookies (and `__Secure-1PSIDTS` if present) into a JSON
+file:
+
+```json
+{"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
+ "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
+```
+
+Pass that file with `--cookies-file`, or pipe the JSON to stdin instead. The
+daemon then shows an emoji; tapping the matching one on Google Messages on the
+phone confirms the pairing. On success, the session is written to that user's
+`gmessages.session_ref`, and `message-gateway daemon` needs no further
+interactive step to use it.
+
+**Checking whether a user has already paired** — a session at their
+`gmessages.session_ref` *is* the pairing state; there is no separate flag.
+`message-gateway status [NAME]` reads that reference (for every user, or just
+`NAME`) and reports `NOT PAIRED — run "msg-gw pair NAME"` or `paired with phone
+<id>` (`--offline` skips the network round-trip that confirms Google still
+honours the session). Equivalently, checking for a non-empty file (or secret)
+at that reference works directly — an empty file counts as "not paired," the
+same as a missing one (this is what `message-gateway logout NAME --local-only`
+leaves behind).
+
+**Restarting does not re-trigger pairing.** `daemon` loads each user's stored
+session on startup and reconnects with it; it never launches the pairing flow
+itself. As long as `gmessages.session_ref` sits on storage that survives a
+restart — the same volume-mount caveat as [`backend.sqlite.path`](#storage-backend)
+— a restarted container reconnects every user silently.
+
+**Pairing a user in an unattended container.** If a user has no session yet,
+that user's bridge does not fail the whole daemon: it retries for 5 attempts,
+60 seconds apart (logging a `warn` line each time), before giving up on that
+user alone — a four-minute window to pair from a separate step:
+
+```bash
+docker exec -it msggw message-gateway pair NAME --cookies-file cookies.json
+docker logs -f msggw
+```
+
+Treat the cookies file itself as a bearer credential for the Google account —
+delete it once pairing succeeds, and keep it out of anywhere `docker logs`
+or shell history would retain it.
+
+### `routing`
+
+This is where you decide **where one user's messages end up in Mattermost**.
+Nothing about the layout is hard-coded, and each user has their own —
+routing is not shared.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -290,9 +357,9 @@ the layout is hard-coded.
 | `rules` | list of rules | `[]` | Evaluated in order; the first match wins. |
 | `thread_per_conversation` | bool | `true` | See [Threads](#threads). |
 | `post_delivery_status` | bool | `false` | See [Delivery status](#delivery-status). |
-| `join_channels` | bool | `false` | Let the daemon add the bot to a channel it is not a member of. Without it, an unjoined channel is an error. |
+| `join_channels` | bool | `false` | Let the daemon add the bot to a channel it is not a member of, **or create a named channel that does not exist yet at all** (as a private channel). Without it, an unjoined or missing channel is an error. |
 
-### Destinations
+#### Destinations
 
 ```json
 { "type": "channel",    "team": "myteam", "channel": "messages" }
@@ -301,9 +368,11 @@ the layout is hard-coded.
 { "type": "group",      "users": ["jfgratton", "someone-else"] }
 ```
 
-- `channel` — a named channel of a named team, by URL name.
+- `channel` — a named channel of a named team, by URL name. With
+  `join_channels` on, the channel is created (private) if it does not exist.
 - `channel_id` — the raw 26-character channel ID. Use this when the channel's
-  URL name may change.
+  URL name may change. Never auto-created: naming an ID means it must already
+  exist.
 - `direct` — the direct-message channel between the bot and one user. This is
   the "everything shows up in my DMs with the bot" layout.
 - `group` — a group direct message between the bot and 2–7 users.
@@ -311,7 +380,7 @@ the layout is hard-coded.
 `team`, `channel`, `channel_id`, `user` and each entry of `users` accept a
 [secret reference](#secret-references) in place of a plain value.
 
-### Rules
+#### Rules
 
 ```json
 {
@@ -344,7 +413,7 @@ A rule is applied when a conversation is **first** bridged. Changing the rules
 later does not move existing threads — that would strand their history — so it
 only affects conversations bridged after the change.
 
-### Threads
+#### Threads
 
 With `thread_per_conversation: true` (the default), each Google Messages
 conversation gets one Mattermost root post, and every message in it becomes a
@@ -366,7 +435,7 @@ only works when a channel is dedicated to a single conversation: without a
 thread to identify it, the daemon has to infer the conversation from the channel
 alone, and it refuses to guess when a channel holds more than one.
 
-### Delivery status
+#### Delivery status
 
 With `post_delivery_status: true`, an outgoing message's state shows up as a
 reaction on its post:
@@ -386,6 +455,9 @@ person who typed it.
 ---
 
 ## Worked examples
+
+Each snippet below is one user's `routing` block — i.e. what goes inside one
+entry of the top-level `users` array, alongside that user's `gmessages` block.
 
 ### Everything in one channel
 
@@ -441,6 +513,27 @@ person who typed it.
 }
 ```
 
-Note that `thread_per_conversation` is global, not per rule. Turning it off puts
-*every* conversation in top-level posts, so use it only when each routed channel
-holds exactly one conversation.
+Note that `thread_per_conversation` is per user, not per rule. Turning it off
+puts *every* one of that user's conversations in top-level posts, so use it
+only when each routed channel holds exactly one conversation.
+
+### Two people, sharing one daemon and one bot
+
+```json
+"users": [
+  {
+    "name": "jfgratton",
+    "gmessages": { "session_ref": "encoded:/data/gmessages/jfgratton.session.enc" },
+    "routing": { "default": { "type": "direct", "user": "jfgratton" } }
+  },
+  {
+    "name": "kiddo",
+    "gmessages": { "session_ref": "encoded:/data/gmessages/kiddo.session.enc" },
+    "routing": { "default": { "type": "direct", "user": "kiddo" } }
+  }
+]
+```
+
+Each user pairs separately (`msg-gw pair jfgratton`, `msg-gw pair kiddo`) and
+runs independently once the daemon starts — one's phone being unreachable, or
+never having paired at all, has no effect on the other's.

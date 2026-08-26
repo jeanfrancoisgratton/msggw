@@ -72,15 +72,18 @@ could be read.`,
 			fmt.Fprintf(out, "mattermost    : %s\n", url)
 		}
 
-		fmt.Fprintf(out, "default route : %s\n", cfg.Routing.Default.String())
-		fmt.Fprintf(out, "routing rules : %d\n", len(cfg.Routing.Rules))
-		fmt.Fprintf(out, "threads       : %v\n", cfg.ThreadPerConversationEnabled())
-
 		fmt.Fprintln(out)
-		problems = append(problems, checkSecret(cmd, "mattermost token", cfg.Mattermost.TokenRef, cfg, true))
-		problems = append(problems, checkSecret(cmd, "gmessages session", cfg.GMessages.SessionRef, cfg, false))
+		problems = append(problems, checkSecret(cmd, "mattermost token", cfg.Mattermost.TokenRef, cfg, true, ""))
 		if cfg.Backend.Driver == config.DatabaseDriverPostgres {
-			problems = append(problems, checkSecret(cmd, "database dsn", cfg.Backend.Postgres.DSNRef, cfg, true))
+			problems = append(problems, checkSecret(cmd, "database dsn", cfg.Backend.Postgres.DSNRef, cfg, true, ""))
+		}
+
+		for _, user := range cfg.Users {
+			fmt.Fprintf(out, "\nuser %q:\n", user.Name)
+			fmt.Fprintf(out, "  default route : %s\n", user.Routing.Default.String())
+			fmt.Fprintf(out, "  routing rules : %d\n", len(user.Routing.Rules))
+			fmt.Fprintf(out, "  threads       : %v\n", user.Routing.ThreadPerConversationEnabled())
+			problems = append(problems, checkSecret(cmd, "  gmessages session", user.GMessages.SessionRef, cfg, false, user.Name))
 		}
 
 		for _, problem := range problems {
@@ -96,8 +99,10 @@ could be read.`,
 
 // checkSecret reports whether a secret reference resolves and can be read.
 // A session that does not exist yet is not a problem — that is what pairing is
-// for — so mustExist distinguishes the two cases.
-func checkSecret(cmd *cobra.Command, label, ref string, cfg *config.Config, mustExist bool) error {
+// for — so mustExist distinguishes the two cases. userName names the pair
+// command to suggest when it does not exist yet; it is unused (and may be
+// empty) when mustExist is true.
+func checkSecret(cmd *cobra.Command, label, ref string, cfg *config.Config, mustExist bool, userName string) error {
 	out := cmd.OutOrStdout()
 
 	store, err := secrets.Open(ref, cfg.Vault)
@@ -116,7 +121,7 @@ func checkSecret(cmd *cobra.Command, label, ref string, cfg *config.Config, must
 			fmt.Fprintf(out, "%-18s: %s — EMPTY\n", label, store.Describe())
 			return fmt.Errorf("%s is empty", label)
 		}
-		fmt.Fprintf(out, "%-18s: %s — not stored yet, run \"msg-gw pair\"\n", label, store.Describe())
+		fmt.Fprintf(out, "%-18s: %s — not stored yet, run \"msg-gw pair %s\"\n", label, store.Describe(), userName)
 		return nil
 	default:
 		fmt.Fprintf(out, "%-18s: %s — UNREADABLE: %v\n", label, store.Describe(), err)
