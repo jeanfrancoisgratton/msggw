@@ -44,6 +44,9 @@
         "mark_read_on_bridge": false,
         "backfill_count": 0
       },
+      "remote_pairing": {
+        "token_ref": "vault:secrets/msggw#jfgratton_pairing_token"
+      },
       "routing": {
         "default": {
           "type": "channel",

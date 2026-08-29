@@ -35,6 +35,7 @@ than a silently-applied default.
 - [`users`](#users)
   - [`gmessages`](#gmessages)
   - [Pairing](#pairing)
+  - [Client-mode pairing](#client-mode-pairing)
   - [`routing`](#routing)
     - [Destinations](#destinations)
     - [Rules](#rules)
@@ -234,11 +235,14 @@ every user in [`users`](#users) — not one per tenant.
 | `cert_file` | string | — | TLS certificate, as a plain filesystem path (not a [secret reference](#secret-references)). |
 | `key_file` | string | — | TLS private key, as a plain filesystem path. |
 
-This listener is groundwork for "client mode" pairing (a client running on the
-operator's own device registers pairing material with the daemon, so the
-device doing the actual Google sign-in is never the daemon's own host —
-see `docs/MULTI-TENANCY.md`); today it only serves a `/healthz` check, so
-there is nothing to route to it yet in normal use.
+This listener serves client-mode pairing (a client running on the operator's
+own device registers pairing material with the daemon, so the device doing
+the actual Google sign-in is never the daemon's own host — see
+[Client-mode pairing](#client-mode-pairing) and `docs/MULTI-TENANCY.md`) at
+`/pair/{name}/start` and `/pair/{name}/wait`, plus a `/healthz` check. Both
+`/pair` routes require a per-user bearer token
+(`users[].remote_pairing.token_ref`); a user with no token configured gets a
+403 from them.
 
 **TLS falls back to plain HTTP, loudly, rather than refusing to start.** If
 `cert_file`/`key_file` are unset, unreadable, or otherwise fail to load as a
@@ -264,6 +268,7 @@ Everything else in this file (`mattermost`, `backend`, `log`, `vault`,
 | `name` | string | — | **Required, and unique among `users`.** Identifies this tenant in `msg-gw pair NAME`, in `status` output, and as the tenant column's value in storage. |
 | `gmessages` | object | — | This user's Google Messages session and behaviour; see [`gmessages`](#gmessages). |
 | `routing` | object | — | This user's routing; see [`routing`](#routing). |
+| `remote_pairing` | object | — | Enables this user for client-mode pairing over the `listener`; see [Client-mode pairing](#client-mode-pairing). |
 
 ```json
 "users": [
@@ -344,6 +349,62 @@ docker logs -f msggw
 Treat the cookies file itself as a bearer credential for the Google account —
 delete it once pairing succeeds, and keep it out of anywhere `docker logs`
 or shell history would retain it.
+
+### Client-mode pairing
+
+Everything above runs the pairing flow *on the daemon's own host* — cookies
+are read there, and libgm signs into Google from there. That means the
+daemon's host is what Google sees logging into the account, which for a VPS
+with no prior login history for that account is exactly the profile Google's
+fraud detection flags.
+
+Client-mode pairing moves that step onto the operator's own device instead.
+It needs two things configured:
+
+1. **The listener is enabled** — `listener.port` is non-zero (see
+   [`listener`](#listener)), ideally with TLS, since pairing cookies travel
+   over this connection.
+2. **The user opts in** — `users[].remote_pairing.token_ref` is set to a
+   [secret reference](#secret-references) resolving to a bearer token, the
+   same mechanism `mattermost.token_ref` uses:
+
+   ```json
+   "remote_pairing": {
+     "token_ref": "vault:secrets/msggw#jfgratton_pairing_token"
+   }
+   ```
+
+   Generate the token yourself (anything unguessable — `openssl rand -hex 32`
+   is fine) and hand it to that user out of band. Leaving `token_ref` unset,
+   or empty, disables remote pairing for that user: the endpoint answers 403
+   rather than accepting an unauthenticated cookie handoff.
+
+With both in place, the operator runs the exact same `msg-gw pair` command
+they would locally, but on their own laptop or phone, with `--remote` and
+`--token` added:
+
+```bash
+msg-gw pair myuser1@gmail.com \
+  --remote https://msggw.example.net:8443 \
+  --token-file ~/.msggw-pairing-token \
+  --cookies-file cookies.json
+```
+
+`--remote` needs no other `msg-gw` configuration on that machine — no `-c`
+config file, no Vault access, nothing beyond the daemon's URL and this one
+user's token. The token itself can come from `--token`, `--token-file`, or
+the `MSGGW_PAIR_TOKEN` environment variable. `--insecure-skip-verify` skips
+TLS certificate verification, for testing against a self-signed listener
+only.
+
+Cookies are still read the same way as local pairing — `--cookies-file` or
+stdin, still the `SID`/`HSID`/`SSID`/`OSID`/`APISID`/`SAPISID` set copied out
+of a signed-in browser session at `https://messages.google.com/web`. What
+changes is that the daemon never has to be told them by hand and never signs
+into Google itself: the daemon relays the emoji back, waits for the phone to
+confirm, verifies the session by reconnecting, and only then reports success —
+the same guarantee local pairing gives, over the network instead of a shell
+on the daemon's host.
 
 ### `routing`
 
