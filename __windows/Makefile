@@ -55,6 +55,11 @@ ARCH      := amd64
 STAGING   := $(NAME)-$(VERSION)-$(RELEASE)_windows_$(ARCH)
 MSI       := $(CURDIR)/$(STAGING).msi
 
+# Where the .msi installs to. No per-product subdirectory is appended --
+# INSTALLDIR is the literal install path -- so override this here (or with
+# `make build INSTALLDIR=...`) if this tool needs its own directory.
+INSTALLDIR := C:\utils
+
 .PHONY: build upload release clean info
 
 build:
@@ -64,7 +69,7 @@ build:
 	  -ldflags="-s -w -buildid=" -o "$(CURDIR)/$(STAGING)/$(BINARY).exe" .
 	wixl -D ProductName=$(NAME) -D ProductVersion=$(MSIVERSION) \
 	  -D Manufacturer=$(MANUFACTURER) -D "Description=$(DESCRIPTION)" \
-	  -D Staging=$(STAGING) -D BinaryName=$(BINARY) \
+	  -D Staging=$(STAGING) -D BinaryName=$(BINARY) -D InstallDir=$(INSTALLDIR) \
 	  -o "$(MSI)" msggw.wxs
 
 upload:
@@ -88,3 +93,4 @@ info:
 	@echo "ARCH        = $(ARCH)"
 	@echo "STAGING     = $(STAGING)"
 	@echo "MSI         = $(MSI)"
+	@echo "INSTALLDIR  = $(INSTALLDIR)"

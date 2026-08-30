@@ -4,7 +4,9 @@
   (Alpine's Windows Installer file toolchain, no Windows/.NET/mono needed;
   see docker_artifacts/CLAUDE.md, "Builders: winbuilder"). Values wrapped in
   $(var.X) are filled in by the Makefile's `wixl -D X=value` flags, sourced
-  from ../msggw.json the same way the rest of this Makefile is.
+  from ../msggw.json the same way the rest of this Makefile is, except
+  InstallDir, which comes straight from the Makefile's own INSTALLDIR
+  variable: edit that to change where this installs.
 
   UpgradeCode and the Component's Guid below are the two identifiers MSI uses
   to recognize "this is the same product/component across versions", so do
@@ -31,16 +33,22 @@
          sitting beside it, and installing an older one is refused outright. -->
     <MajorUpgrade DowngradeErrorMessage='A newer version of $(var.ProductName) is already installed.' />
 
+    <!-- Seeds INSTALLDIR with an absolute path (Makefile's INSTALLDIR,
+         default C:\utils) instead of the usual ProgramFilesFolder\ProductName
+         default CostFinalize would otherwise compute from the Directory
+         table below; and since the Directory table has no
+         ProgramFilesFolder ancestor at all, no per-product subdirectory
+         either. -->
+    <Property Id='INSTALLDIR' Value='$(var.InstallDir)' />
+
     <Media Id='1' Cabinet='product.cab' EmbedCab='yes' />
 
     <Directory Id='TARGETDIR' Name='SourceDir'>
-      <Directory Id='ProgramFilesFolder'>
-        <Directory Id='INSTALLDIR' Name='$(var.ProductName)'>
-          <Component Id='MainExecutable' Guid='29C8885A-710B-4EEE-84DE-019689CC7296'>
-            <File Id='MainEXE' Name='$(var.BinaryName).exe'
-              Source='$(var.Staging)/$(var.BinaryName).exe' KeyPath='yes' />
-          </Component>
-        </Directory>
+      <Directory Id='INSTALLDIR' Name='INSTALLDIR'>
+        <Component Id='MainExecutable' Guid='076B8203-2A43-4AD0-9B79-B861FCE0FF24'>
+          <File Id='MainEXE' Name='$(var.BinaryName).exe'
+            Source='$(var.Staging)/$(var.BinaryName).exe' KeyPath='yes' />
+        </Component>
       </Directory>
     </Directory>
 
