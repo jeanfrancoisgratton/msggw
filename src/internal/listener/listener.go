@@ -146,11 +146,10 @@ func (w errorLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// DefaultHandler is a placeholder handler for a listener with nothing else
-// wired to it yet: a health check, so the listener is observable on its own
-// before client-mode pairing (docs/MULTI-TENANCY.md) has anywhere to route
-// requests to.
-func DefaultHandler() http.Handler {
+// DefaultHandler is the listener's base handler: a health check, plus
+// whatever else the caller mounts onto the returned mux (client-mode
+// pairing's routes — see cmd/pairserver.go and docs/MULTI-TENANCY.md).
+func DefaultHandler() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

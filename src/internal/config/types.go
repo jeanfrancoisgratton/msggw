@@ -65,8 +65,27 @@ type UserConfig struct {
 	// unique among Users.
 	Name string `json:"name"`
 
-	GMessages GMessagesConfig `json:"gmessages"`
-	Routing   RoutingConfig   `json:"routing"`
+	GMessages     GMessagesConfig     `json:"gmessages"`
+	Routing       RoutingConfig       `json:"routing"`
+	RemotePairing RemotePairingConfig `json:"remote_pairing,omitempty"`
+}
+
+// RemotePairingConfig enables "client mode" pairing for this tenant (see
+// docs/MULTI-TENANCY.md): a client running the msg-gw binary on the
+// operator's own device — not this daemon's host — authenticates with
+// TokenRef and hands over pairing cookies through the listener's HTTP(S)
+// endpoint, instead of a human copying a cookies.json onto the daemon.
+//
+// Empty TokenRef disables remote pairing for this user: the endpoint answers
+// 403 rather than accepting an unauthenticated cookie handoff. There is no
+// separate "enabled" flag, the same way ListenerConfig.Port uses 0 to mean
+// off.
+type RemotePairingConfig struct {
+	// TokenRef resolves to the bearer token a remote client must present in
+	// its Authorization header. Unlike GMessagesConfig.SessionRef, this is
+	// never written back, so any secret scheme (including literal: and env:)
+	// is fine here.
+	TokenRef string `json:"token_ref,omitempty"`
 }
 
 // BackendConfig selects the storage backend. Both the SQLite and Postgres

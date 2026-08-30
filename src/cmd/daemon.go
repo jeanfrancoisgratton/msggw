@@ -149,11 +149,16 @@ func runUser(ctx context.Context, cfg *config.Config, user config.UserConfig, lo
 }
 
 func startListener(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
+	mux := listener.DefaultHandler()
+	pairSrv := newPairServer(cfg, log)
+	pairSrv.mount(mux)
+	go pairSrv.sweep(ctx)
+
 	lst, err := listener.New(listener.Config{
 		Port:     cfg.Listener.Port,
 		CertFile: cfg.Listener.CertFile,
 		KeyFile:  cfg.Listener.KeyFile,
-	}, listener.DefaultHandler(), log)
+	}, mux, log)
 	if err != nil {
 		return fmt.Errorf("starting the listener: %w", err)
 	}

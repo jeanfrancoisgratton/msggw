@@ -215,16 +215,37 @@ turns out to be) signs into Google on the operator's own device, then hands
 the resulting session material to the daemon over the network instead of a
 human copying a `cookies.json` by hand.
 
-Planned build order:
+Planned build order — all three steps are now done:
 
-1. **The HTTP(S) listener** (`internal/listener`, config's `listener` block —
-   done). Deliberately built before there is anything real to route to it: it
-   only serves `/healthz` today. TLS falls back to plain HTTP, loudly, if
-   `cert_file`/`key_file` are missing or unusable — see
+1. **The HTTP(S) listener** (`internal/listener`, config's `listener` block).
+   Built before there was anything real to route to: it serves `/healthz`,
+   plus whatever else is mounted onto it. TLS falls back to plain HTTP,
+   loudly, if `cert_file`/`key_file` are missing or unusable — see
    `docs/CONFIGURATION.md#listener`.
-2. **Multi-tenancy** (the rest of this document — done). A pairing endpoint
-   now has somewhere real to route to: each `users[]` entry names the tenant
-   whose `session_ref` a client would be registering against.
-3. **The client side** — not started. Still implies a new config block
-   (where the client sends its registration) and a `/pair`-style HTTP handler
-   on the step-1 listener, once its shape is known.
+2. **Multi-tenancy** (the rest of this document). The pairing endpoint below
+   routes by tenant: each `users[]` entry names the `session_ref` a client
+   registers against.
+3. **The client side** (`internal/pairproto`, `internal/pairclient`,
+   `cmd/pairserver.go`). `msg-gw pair NAME --remote https://daemon:PORT
+   --token TOKEN` runs entirely on the operator's own device: it reads
+   cookies the same way local pairing does (`--cookies-file` or stdin), then
+   POSTs them to the daemon's `/pair/{name}/start` and `/pair/{name}/wait`
+   instead of calling `internal/gmessages` locally. The Google sign-in itself
+   still has to happen in a browser on that device — nothing about *how*
+   cookies are obtained changed, only *where the daemon-facing half of
+   pairing runs*, which is the part that mattered: a VPS's IP signing in with
+   no prior login history for the account is what Google's fraud detection
+   flags, and that step never touches the daemon's host in this shape.
+
+   Each tenant opts in per user, via `users[].remote_pairing.token_ref` (a
+   [secret reference](CONFIGURATION.md#secret-references), same mechanism as
+   `mattermost.token_ref`) — a bearer token the client must present. Empty or
+   unset disables remote pairing for that user: the endpoint answers 403
+   rather than accepting an unauthenticated cookie handoff. `/start` returns
+   the emoji to show; `/wait` blocks until the phone confirms, then the
+   daemon runs the same `Verify` reconnect-and-fetch-conversations step the
+   local flow does, and only then responds — so a client that got a 200 from
+   `/wait` has exactly the same guarantee local pairing gives. A pairing that
+   is started but never waited on (a crashed client) is closed and forgotten
+   after five minutes, so it cannot leak an open connection to Google
+   indefinitely.
