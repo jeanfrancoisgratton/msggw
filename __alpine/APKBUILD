@@ -1,7 +1,7 @@
 # Maintainer: J.F. Gratton <jean-francois@famillegratton.net>
 # Packager: Package builder <builder@famillegratton.net>
 pkgname=msggw
-pkgver=0.6.0
+pkgver=0.7.0
 pkgrel=1
 pkgdir=/data/packages
 pkgdesc="Messages <-> Mattermost bridge"
