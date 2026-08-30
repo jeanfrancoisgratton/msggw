@@ -4,7 +4,7 @@
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
 %define _version 0.7.1
-%define _rel 1
+%define _rel 2
 %define _arch x86_64
 %define _binaryname message-gateway
 
@@ -55,6 +55,11 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.1-1
+- Merge branch 'develop'
+- bug(winbuilder): fixed default targetdir
+- chore: update changelog for 0.7.0-1
+
 * Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.0-1
 - remove dontexec flag
 - Merge remote-tracking branch 'refs/remotes/origin/develop' into develop

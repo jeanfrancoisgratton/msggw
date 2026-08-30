@@ -58,7 +58,7 @@ MSI       := $(CURDIR)/$(STAGING).msi
 # Where the .msi installs to. No per-product subdirectory is appended --
 # INSTALLDIR is the literal install path -- so override this here (or with
 # `make build INSTALLDIR=...`) if this tool needs its own directory.
-INSTALLDIR := C:\utils
+INSTALLDIR := C:\\utils
 
 .PHONY: build upload release clean info
 
