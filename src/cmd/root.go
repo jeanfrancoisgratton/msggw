@@ -61,11 +61,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "",
 		"configuration file (default /etc/msggw/config.json, then $XDG_CONFIG_HOME/msggw/config.json)")
 
-	rootCmd.AddCommand(completionCmd)
-	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(pairCmd)
-	rootCmd.AddCommand(daemonCmd)
-	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(logoutCmd)
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, statusCmd, logoutCmd, versionCmd)
 }
