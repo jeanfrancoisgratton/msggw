@@ -55,6 +55,11 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.1-2
+- Merge branch 'develop'
+- more targetdir fixes
+- chore: update changelog for 0.7.1-1
+
 * Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.1-1
 - Merge branch 'develop'
 - bug(winbuilder): fixed default targetdir
