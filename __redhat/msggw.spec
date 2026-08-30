@@ -3,7 +3,7 @@
 %define _name msggw
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
-%define _version 0.7.0
+%define _version 0.7.1
 %define _rel 1
 %define _arch x86_64
 %define _binaryname message-gateway
@@ -55,6 +55,19 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.0-1
+- remove dontexec flag
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- version bump, trial build
+- dontexec
+- pairing users - phase 2
+- multi-tenancy support
+- added a listener; more to come
+- chore: update changelog for 0.5.0-2
+- Merge branch 'main' into develop
+- bug(BUILDERS): binary should be installed in /opt/sbin, not /opt/bin
+- chore: update changelog for 0.5.0-1
+
 * Sat Aug 22 2026 Binary package builder <builder@famillegratton.net> 0.5.0-2
 - bug(BUILDERS): binary should be installed in /opt/sbin, not /opt/bin
 
