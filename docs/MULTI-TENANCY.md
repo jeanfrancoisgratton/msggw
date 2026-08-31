@@ -210,10 +210,12 @@ Separate from the above, but related: cookie-based pairing (see
 Google, not the daemon's host — signing in from a VPS's IP, with no prior
 login history for that account, is exactly the profile Google's fraud
 detection flags. "Client mode" moves that step to wherever the operator
-actually is: a client (browser extension, small app, whatever step 3 below
-turns out to be) signs into Google on the operator's own device, then hands
-the resulting session material to the daemon over the network instead of a
-human copying a `cookies.json` by hand.
+actually is: `msg-gw pair --remote` itself is the client — it signs into
+Google on the operator's own device (by default via `internal/browserauth`,
+which opens a local browser and captures the resulting cookies automatically;
+see `docs/RUNNING.md`'s "Fallback: manual cookies" for the headless
+alternative), then hands the resulting session material to the daemon over
+the network instead of a human copying a `cookies.json` by hand.
 
 Planned build order — all three steps are now done:
 
@@ -226,16 +228,20 @@ Planned build order — all three steps are now done:
    routes by tenant: each `users[]` entry names the `session_ref` a client
    registers against.
 3. **The client side** (`internal/pairproto`, `internal/pairclient`,
-   `cmd/pairserver.go`). `msg-gw pair NAME --remote https://daemon:PORT
-   --token TOKEN` runs entirely on the operator's own device: it reads
-   cookies the same way local pairing does (`--cookies-file` or stdin), then
-   POSTs them to the daemon's `/pair/{name}/start` and `/pair/{name}/wait`
-   instead of calling `internal/gmessages` locally. The Google sign-in itself
-   still has to happen in a browser on that device — nothing about *how*
-   cookies are obtained changed, only *where the daemon-facing half of
-   pairing runs*, which is the part that mattered: a VPS's IP signing in with
-   no prior login history for the account is what Google's fraud detection
-   flags, and that step never touches the daemon's host in this shape.
+   `internal/browserauth`, `cmd/pairserver.go`). `msg-gw pair NAME --remote
+   https://daemon:PORT --token TOKEN` runs entirely on the operator's own
+   device: it obtains cookies the same way local pairing does — by default,
+   `internal/browserauth` drives a local Chrome/Chromium/Edge to capture them
+   automatically; `--cookies-file`, piped stdin, or `--no-browser` remain as
+   the fallback for headless devices — then POSTs them to the daemon's
+   `/pair/{name}/start` and `/pair/{name}/wait` instead of calling
+   `internal/gmessages` locally. *How* cookies are obtained changed with
+   `internal/browserauth` — it's automated now, not a manual devtools copy —
+   but *where the daemon-facing half of pairing runs* didn't: still the
+   operator's own device, never the daemon's host, which is the part that
+   actually matters. A VPS's IP signing in with no prior login history for
+   the account is what Google's fraud detection flags, and that step never
+   touches the daemon's host in this shape.
 
    Each tenant opts in per user, via `users[].remote_pairing.token_ref` (a
    [secret reference](CONFIGURATION.md#secret-references), same mechanism as

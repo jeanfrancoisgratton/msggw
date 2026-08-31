@@ -553,6 +553,7 @@ The trade-off is explicit and accepted:
 
 | Document | Contents |
 |----------|----------|
+| [docs/RUNNING.md](docs/RUNNING.md) | How to set up the daemon, and how to pair a client (user) |
 | [docs/SOLUTION.md](docs/SOLUTION.md) | Full design document (authoritative) |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference: routing, storage backends, secrets, every key |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features and target releases |
