@@ -29,6 +29,7 @@ the other: set up the daemon, then pair yourself as its one user.
   - [Remote pairing — client mode](#remote-pairing--client-mode)
   - [Checking your own status](#checking-your-own-status)
   - [Unpairing](#unpairing)
+  - [Fallback: manual cookies (headless / no-browser environments)](#fallback-manual-cookies-headless--no-browser-environments)
 
 ---
 
@@ -185,23 +186,18 @@ Messages app to one `users[]` entry the operator has already created for you
 run once per user, and the resulting session is what makes `status` report
 "paired" from then on.
 
-Either way, you'll need cookies from a signed-in Google Messages web session:
-Google retired QR-code device pairing, so `pair` authenticates as your Google
-account instead.
+Either way, pairing needs a signed-in Google Messages web session — Google
+retired QR-code device pairing, so `pair` authenticates as your Google
+account instead. By default, `pair` handles that itself: it opens a browser
+window for you to sign into Google, watches for the sign-in to complete, and
+closes the window on its own once it has what it needs. There's nothing to
+copy, no devtools, no JSON file — just the one thing only you can do, which
+is proving it's your Google account.
 
-1. Sign into `https://messages.google.com/web` in a **private** browser
-   window.
-2. Open devtools and copy the `SID`, `HSID`, `SSID`, `OSID`, `APISID` and
-   `SAPISID` cookies (and `__Secure-1PSIDTS`, if present) into a JSON file:
-
-   ```json
-   {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
-    "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
-   ```
-
-   Treat this file as a bearer credential for your Google account — delete it
-   once pairing succeeds, and keep it out of shell history or anywhere it'd
-   get logged.
+If a browser can't be opened — a headless server, an SSH-only box, a
+scripted pairing pipeline — there's still a way through. See [Fallback:
+manual cookies](#fallback-manual-cookies-headless--no-browser-environments)
+at the end of this section.
 
 Which of the two pairing modes below applies depends on whether you have
 shell access to the machine the daemon runs on.
@@ -212,11 +208,13 @@ This runs `pair` on the same machine as the daemon, using its configuration
 file directly:
 
 ```bash
-message-gateway pair NAME --cookies-file cookies.json
+message-gateway pair NAME
 ```
 
 `NAME` must match your `name` entry under `users` in the operator's
-configuration. The command prints an emoji:
+configuration. A browser window opens to Google's sign-in page; sign in
+there as you normally would. Once you're signed in, the window closes and
+the command prints an emoji:
 
 ```text
 On the phone, open Google Messages and tap this emoji when it's offered:
@@ -262,21 +260,24 @@ This needs two things the **operator** must have already set up on their end
 2. Your `users[].remote_pairing.token_ref` is set, and the operator has
    handed you the bearer token it resolves to, out of band.
 
-With cookies in hand (same steps as above) and that token, run `pair` with
-`--remote` — this needs no config file, no Vault access, nothing beyond the
-daemon's URL and your token:
+With that token in hand, run `pair` with `--remote` — this needs no config
+file, no Vault access, nothing beyond the daemon's URL and your token:
 
 ```bash
 message-gateway pair NAME \
   --remote https://msggw.example.net:8443 \
-  --token-file ~/.msggw-pairing-token \
-  --cookies-file cookies.json
+  --token-file ~/.msggw-pairing-token
 ```
 
 The token can also be passed with `--token`, or via the `MSGGW_PAIR_TOKEN`
 environment variable, instead of `--token-file`. `--insecure-skip-verify`
 skips TLS certificate verification, for testing against a self-signed
 listener only — don't use it against a real deployment.
+
+Just like local pairing, this opens a browser window for you to sign into
+Google — it happens right here, on this device, which is the whole point of
+client mode: the daemon's host never touches your Google account, only the
+resulting session material, sent over the network after you've signed in.
 
 The rest of the flow looks identical to local pairing: an emoji to tap on the
 phone, then a wait for confirmation. Behind the scenes, the daemon relays the
@@ -313,3 +314,42 @@ connect with), add `--local-only` to just delete the stored session without
 attempting to reach the phone first. Either way, your Mattermost threads and
 message history are left alone — re-pairing the same phone picks them back
 up.
+
+### Fallback: manual cookies (headless / no-browser environments)
+
+This is **not** the recommended way to pair — it exists for machines where
+`pair` can't open a browser at all: a headless server, an SSH-only box with
+no display, or a scripted/automated pairing pipeline. If you can run `pair`
+on a machine with a screen, use the default flow above instead.
+
+The fallback supplies the same Google account cookies `pair` would otherwise
+capture for you, by hand:
+
+1. Sign into `https://messages.google.com/web` in a **private** browser
+   window, on any device — it doesn't need to be the machine `pair` runs on.
+2. Open devtools and copy the `SID`, `HSID`, `SSID`, `OSID`, `APISID` and
+   `SAPISID` cookies (and `__Secure-1PSIDTS`, if present) into a JSON file:
+
+   ```json
+   {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
+    "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
+   ```
+
+   Treat this file as a bearer credential for your Google account — delete it
+   once pairing succeeds, and keep it out of shell history or anywhere it'd
+   get logged.
+
+Then reach `pair` with that JSON in one of three equivalent ways:
+
+- `message-gateway pair NAME --cookies-file cookies.json`
+- `message-gateway pair NAME < cookies.json` (piping it to stdin — `pair`
+  treats any non-interactive stdin as this fallback automatically, no flag
+  needed)
+- `message-gateway pair NAME --no-browser` and paste the JSON when prompted —
+  useful when stdin is an interactive terminal but you still don't want a
+  browser to launch
+
+This works with `--remote` client-mode pairing too: add
+`--cookies-file`/`--no-browser` to a `pair NAME --remote ...` invocation
+exactly as shown above, and everything past cookie acquisition proceeds
+identically to the default flow — same emoji prompt, same verification step.
