@@ -17,13 +17,16 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
+	"msggw/internal/browserauth"
 	"msggw/internal/gmessages"
 	"msggw/internal/pairclient"
 )
 
 var (
 	pairCookiesFile        string
+	pairNoBrowser          bool
 	pairRemote             string
 	pairToken              string
 	pairTokenFile          string
@@ -39,18 +42,27 @@ NAME must match one of the "name" entries under "users" in the configuration —
 this is which tenant the pairing is stored against.
 
 Google killed QR-code device pairing, so this authenticates as your Google
-account instead. Sign into https://messages.google.com/web in a private
-browser window, open devtools, and copy the SID, HSID, SSID, OSID, APISID and
-SAPISID cookies (and __Secure-1PSIDTS if present) into a JSON file:
+account instead. By default, pair opens a browser window for you to sign into
+that account — nothing to copy, nothing to configure. Once you're signed in,
+the window closes on its own and pairing continues. The daemon then shows an
+emoji; tap the matching one on Google Messages on the phone to confirm.
+
+Once paired, the session is stored at that user's gmessages.session_ref and the
+daemon can reconnect without pairing again.
+
+For environments where a browser can't be opened (a headless server, an
+SSH-only box, a scripted pairing pipeline), a manual fallback still exists:
+sign into https://messages.google.com/web yourself, open devtools, and copy
+the SID, HSID, SSID, OSID, APISID and SAPISID cookies (and __Secure-1PSIDTS if
+present) into a JSON file:
 
   {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
    "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
 
-Pass that file with --cookies-file, or pipe it to stdin. The daemon then shows
-an emoji; tap the matching one on Google Messages on the phone to confirm.
-
-Once paired, the session is stored at that user's gmessages.session_ref and the
-daemon can reconnect without pairing again.
+Reach it with --cookies-file, by piping that JSON to stdin, or with
+--no-browser (which reads stdin without needing to also make stdin
+non-interactive). See docs/RUNNING.md, "Fallback: manual cookies", for the
+full walkthrough.
 
 With --remote, this runs in "client mode" (see docs/MULTI-TENANCY.md): the
 cookies never leave the machine this command runs on except over the network
@@ -65,14 +77,14 @@ variable.`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cookies, err := readCookies(cmd)
-		if err != nil {
-			return err
-		}
-
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		out := cmd.OutOrStdout()
+
+		cookies, err := resolveCookies(ctx, cmd, out)
+		if err != nil {
+			return err
+		}
 
 		if pairRemote != "" {
 			return runRemotePairing(ctx, out, args[0], cookies)
@@ -165,21 +177,54 @@ func resolvePairToken() (string, error) {
 	return "", fmt.Errorf("--remote needs a token: pass --token, --token-file, or set MSGGW_PAIR_TOKEN")
 }
 
-// readCookies loads the Google account cookies from --cookies-file, or from
-// stdin when that flag is not given.
-func readCookies(cmd *cobra.Command) (map[string]string, error) {
-	var r io.Reader
-	if pairCookiesFile != "" {
-		f, err := os.Open(pairCookiesFile)
+// resolveCookies picks where the Google account cookies come from: an
+// explicit --cookies-file always wins; --no-browser or a piped (non-tty)
+// stdin falls back to reading JSON from stdin; otherwise — the default —
+// a browser opens and drives the sign-in itself, so pairing never asks a
+// non-technical user to touch devtools or hand-copy a cookies.json.
+func resolveCookies(ctx context.Context, cmd *cobra.Command, out io.Writer) (map[string]string, error) {
+	switch {
+	case pairCookiesFile != "":
+		return readCookiesFile(pairCookiesFile)
+	case pairNoBrowser || !isInteractive(cmd):
+		return readCookiesStdin(cmd)
+	default:
+		cookies, err := browserauth.CaptureCookies(ctx, out)
 		if err != nil {
-			return nil, fmt.Errorf("opening cookies file: %w", err)
+			return nil, err
 		}
-		defer f.Close()
-		r = f
-	} else {
-		r = cmd.InOrStdin()
+		if err := gmessages.ValidateCookies(cookies); err != nil {
+			return nil, err
+		}
+		return cookies, nil
 	}
+}
 
+// isInteractive reports whether cmd's stdin is an actual terminal, rather
+// than a pipe or a file — the signal to launch a browser instead of trying
+// to read cookies JSON off it.
+func isInteractive(cmd *cobra.Command) bool {
+	f, ok := cmd.InOrStdin().(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
+
+// readCookiesFile loads the Google account cookies from a --cookies-file.
+func readCookiesFile(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening cookies file: %w", err)
+	}
+	defer f.Close()
+	return decodeCookies(f)
+}
+
+// readCookiesStdin loads the Google account cookies as JSON from stdin —
+// the fallback for --no-browser and scripted/piped invocations.
+func readCookiesStdin(cmd *cobra.Command) (map[string]string, error) {
+	return decodeCookies(cmd.InOrStdin())
+}
+
+func decodeCookies(r io.Reader) (map[string]string, error) {
 	var cookies map[string]string
 	if err := json.NewDecoder(r).Decode(&cookies); err != nil {
 		return nil, fmt.Errorf("reading cookies as JSON: %w", err)
@@ -223,7 +268,9 @@ func verifyPairing(ctx context.Context, out io.Writer, pairing *gmessages.Pairin
 
 func init() {
 	pairCmd.Flags().StringVar(&pairCookiesFile, "cookies-file", "",
-		"JSON file with Google account cookies (reads stdin if omitted)")
+		"fallback: JSON file with Google account cookies, instead of the automated browser sign-in")
+	pairCmd.Flags().BoolVar(&pairNoBrowser, "no-browser", false,
+		"fallback: skip the automated browser sign-in and read cookies JSON from stdin instead")
 	pairCmd.Flags().StringVar(&pairRemote, "remote", "",
 		"pair against a daemon over the network (e.g. https://msggw.example.net:8443) instead of locally — client mode, see docs/MULTI-TENANCY.md")
 	pairCmd.Flags().StringVar(&pairToken, "token", "",
