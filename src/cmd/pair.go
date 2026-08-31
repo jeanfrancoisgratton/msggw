@@ -47,8 +47,9 @@ that account — nothing to copy, nothing to configure. Once you're signed in,
 the window closes on its own and pairing continues. The daemon then shows an
 emoji; tap the matching one on Google Messages on the phone to confirm.
 
-Once paired, the session is stored at that user's gmessages.session_ref and the
-daemon can reconnect without pairing again.
+Once paired, the session is stored under root_dir (see
+docs/CONFIGURATION.md#gmessages) and the daemon can reconnect without pairing
+again.
 
 For environments where a browser can't be opened (a headless server, an
 SSH-only box, a scripted pairing pipeline), a manual fallback still exists:

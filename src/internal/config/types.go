@@ -39,6 +39,14 @@ type Config struct {
 	// SQLite database (when Backend.Driver is sqlite), and downloaded media
 	// while it is in flight.
 	StateDir string `json:"state_dir"`
+	// RootDir is the root of the persistent volume for secrets that are
+	// managed at runtime rather than provisioned by the operator — today,
+	// just each user's Google Messages session, which libgm rewrites roughly
+	// hourly and which therefore does not belong in Vault or Postgres. It is
+	// distinct from StateDir (non-secret persisted state): the two commonly
+	// sit on different volumes, and nothing conflates them. Required; must
+	// be an absolute path.
+	RootDir string `json:"root_dir"`
 	// Backend selects and configures the storage backend.
 	Backend BackendConfig `json:"backend,omitempty"`
 
@@ -82,9 +90,9 @@ type UserConfig struct {
 // off.
 type RemotePairingConfig struct {
 	// TokenRef resolves to the bearer token a remote client must present in
-	// its Authorization header. Unlike GMessagesConfig.SessionRef, this is
-	// never written back, so any secret scheme (including literal: and env:)
-	// is fine here.
+	// its Authorization header. Unlike the Google Messages session, which
+	// libgm rewrites roughly hourly, this is never written back, so any
+	// secret scheme (including literal: and env:) is fine here.
 	TokenRef string `json:"token_ref,omitempty"`
 }
 
@@ -130,11 +138,6 @@ type LogConfig struct {
 
 // GMessagesConfig covers the Google Messages side of the bridge.
 type GMessagesConfig struct {
-	// SessionRef is where the paired-device session lives. It must be a
-	// writable reference — file:, encoded: or vault: — because libgm refreshes
-	// its auth token while running and the new one has to be persisted.
-	SessionRef string `json:"session_ref"`
-
 	// PingIntervalSeconds is how often libgm pings the phone. libgm clamps
 	// this to [1 minute, 4 hours]; 0 keeps its default of one minute.
 	PingIntervalSeconds int `json:"ping_interval_seconds,omitempty"`

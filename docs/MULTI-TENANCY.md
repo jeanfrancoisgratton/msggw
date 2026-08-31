@@ -36,10 +36,19 @@ this document is about this option.
 
 Corrections to the original list this conversation started from:
 
-- **Pairing aware of a tenant** — right, and cheaper than the "templated
-  `session_ref`" idea floated originally: since each user entry in `users: []`
-  just writes its own literal `session_ref`, no templating was needed at all.
-  `msg-gw pair NAME` looks NAME up in `users` and pairs into that entry's
+- **Pairing aware of a tenant** — right. The original "templated
+  `session_ref`" idea was rejected at the time in favor of each user entry
+  writing its own literal `session_ref`, on the reasoning that no templating
+  was needed at all. That held until a real deployment showed the failure
+  mode this document didn't anticipate: the single-tenant-era config kept
+  its one hand-written `session_ref` untouched when a second user was
+  added, with nothing forcing a distinct path per tenant — a silent session
+  collision waiting to happen, not a hypothetical one. `session_ref` is no
+  longer an operator-settable field: a top-level `root_dir` plus
+  `Config.SessionRef(user)` derive `encoded:$root_dir/gmessages/$name_session.enc`
+  deterministically, so there is no longer a hand-written value that can go
+  stale or collide — see [`docs/CONFIGURATION.md#gmessages`](CONFIGURATION.md#gmessages).
+  `msg-gw pair NAME` looks NAME up in `users` and pairs into that derived
   reference directly.
 - **A bot account per user** — this was a mis-speak in the original ask (the
   first draft said "webhook"), corrected to "bot account." Bot-per-user isn't
@@ -60,8 +69,9 @@ Corrections to the original list this conversation started from:
   `gmessages` + `routing` held at the top level before. Implemented as a
   clean break rather than keeping the old top-level fields as an implicit
   single-user fallback — one config shape to document and validate, not two.
-- **`session_ref` per user** — straightforward, same mechanism as pairing
-  above.
+- **A session per user, without a `session_ref` per user** — see the
+  reversal above: `root_dir` plus the user's `name` derive it, rather than
+  each entry writing one by hand.
 
 ## What wasn't on the original list, and is the actually hard part
 
@@ -160,9 +170,8 @@ Kept on the table, not discarded — nothing below option B is committed, and
 this needs zero code to work today.
 
 - **What it looks like operationally.** One container/process per person,
-  each with its own `config.json`, `gmessages.session_ref`, and
-  `state_dir`/database, all pointed at the same (or different) Mattermost
-  server. Whether each person gets their own bot account or they share one is
+  each with its own `config.json`, `root_dir`, and `state_dir`/database, all
+  pointed at the same (or different) Mattermost server. Whether each person gets their own bot account or they share one is
   an independent choice, orthogonal to which shape (A or B) is picked.
 - **Why it stays attractive.** Complete isolation is free: no tenant column,
   no cross-tenant leak risk (see
@@ -225,8 +234,8 @@ Planned build order — all three steps are now done:
    loudly, if `cert_file`/`key_file` are missing or unusable — see
    `docs/CONFIGURATION.md#listener`.
 2. **Multi-tenancy** (the rest of this document). The pairing endpoint below
-   routes by tenant: each `users[]` entry names the `session_ref` a client
-   registers against.
+   routes by tenant: each `users[]` entry's `name` identifies which tenant's
+   derived session a client registers against.
 3. **The client side** (`internal/pairproto`, `internal/pairclient`,
    `internal/browserauth`, `cmd/pairserver.go`). `msg-gw pair NAME --remote
    https://daemon:PORT --token TOKEN` runs entirely on the operator's own

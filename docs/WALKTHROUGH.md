@@ -461,7 +461,8 @@ connections.
 **`newGMessagesClientWithRetry` (`daemon.go`, next to the command) exists for
 one scenario: a container that starts `daemon` before anyone has run `pair`.**
 Plain `gmessages.New` returns `ErrNotPaired` the instant there is no session at
-`gmessages.session_ref` (`gmessages/auth.go:56`) — that's correct for a human
+the user's derived session path (`Config.SessionRef(user)`,
+`internal/config/config.go`; `gmessages/auth.go:56`) — that's correct for a human
 running the CLI directly, but fatal for a container that starts the daemon and
 runs `pair` as two separate steps: the daemon would exit before pairing ever
 had a chance to happen. The retry loop catches specifically that error (any
@@ -804,7 +805,7 @@ so the condition has to be rechecked in a loop, not assumed true just because
 | `/etc/msggw/config.json` | your configuration | you |
 | `/var/lib/msggw/msggw.db` (SQLite mode) | the mapping database | `internal/storage` |
 | a Postgres database (Postgres mode) | the same mapping tables | `internal/storage` |
-| wherever `gmessages.session_ref` points | the Google Messages session | `SessionStore` (`gmessages/auth.go`) |
+| `root_dir/gmessages/NAME_session.enc` | the Google Messages session | `SessionStore` (`gmessages/auth.go`) |
 | wherever `mattermost.token_ref` points | your bot's access token | you |
 
 The session file is the one that actually matters day to day: lose it and you

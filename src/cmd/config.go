@@ -52,6 +52,7 @@ could be read.`,
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "configuration : %s\n", cfg.Path())
 		fmt.Fprintf(out, "state dir     : %s\n", cfg.StateDir)
+		fmt.Fprintf(out, "root dir      : %s\n", cfg.RootDir)
 		fmt.Fprintf(out, "db driver     : %s\n", cfg.Backend.Driver)
 
 		var problems []error
@@ -83,7 +84,7 @@ could be read.`,
 			fmt.Fprintf(out, "  default route : %s\n", user.Routing.Default.String())
 			fmt.Fprintf(out, "  routing rules : %d\n", len(user.Routing.Rules))
 			fmt.Fprintf(out, "  threads       : %v\n", user.Routing.ThreadPerConversationEnabled())
-			problems = append(problems, checkSecret(cmd, "  gmessages session", user.GMessages.SessionRef, cfg, false, user.Name))
+			problems = append(problems, checkSecret(cmd, "  gmessages session", cfg.SessionRef(user), cfg, false, user.Name))
 		}
 
 		for _, problem := range problems {

@@ -31,9 +31,9 @@ func newLogger(cfg *config.Config) *slog.Logger {
 
 // newSessionStore resolves a user's Google Messages session reference.
 func newSessionStore(user config.UserConfig, cfg *config.Config) (*gmessages.SessionStore, error) {
-	store, err := secrets.Open(user.GMessages.SessionRef, cfg.Vault)
+	store, err := secrets.Open(cfg.SessionRef(user), cfg.Vault)
 	if err != nil {
-		return nil, fmt.Errorf("users %s: gmessages.session_ref: %w", user.Name, err)
+		return nil, fmt.Errorf("users %s: session storage: %w", user.Name, err)
 	}
 	return gmessages.NewSessionStore(store), nil
 }

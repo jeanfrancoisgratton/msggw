@@ -63,22 +63,21 @@ A reference with no recognised scheme is an error. That is deliberate: a bare
 string would otherwise be indistinguishable from a token accidentally pasted
 into a world-readable file.
 
-**Four settings are always a reference**, because they hold a credential:
-`users[].gmessages.session_ref`, `mattermost.token_ref`, `backend.postgres.dsn_ref`
-and `vault.token_ref`. Elsewhere, a reference is optional: `backend.sqlite.path`,
-`mattermost.url`, `vault.address`, and every routing [destination](#destinations)
-field (`team`, `channel`, `channel_id`, `user`, `users`) normally take a plain
-value, but also accept a reference for an operator who wants the value —
-sensitive or not — kept out of the config file too. A plain value works
-exactly as before: it is only treated as a reference when its prefix, up to
-the first `:`, matches one of the schemes above (so a `https://...` URL, an
-ordinary filesystem path, or a bare username all pass through untouched).
-
-**Writability matters for one setting only.** `users[].gmessages.session_ref` has
-to be writable, because `libgm` refreshes its Google auth token roughly hourly and
-the refreshed session must be persisted; a session behind `env:` or `literal:` would
-force a re-pairing on every restart. The configuration rejects those two schemes
-for that field.
+**Three settings are always a reference**, because they hold a credential:
+`mattermost.token_ref`, `backend.postgres.dsn_ref` and `vault.token_ref`. A
+user's Google Messages session is also always a reference under the hood —
+but it is not operator-set: `Config.SessionRef(user)` derives it from
+[`root_dir`](#top-level) and the user's `name`, always as a writable
+`encoded:` file, so there is no scheme for an operator to get wrong. See
+[`gmessages`](#gmessages). Elsewhere, a reference is optional:
+`backend.sqlite.path`, `mattermost.url`, `vault.address`, and every routing
+[destination](#destinations) field (`team`, `channel`, `channel_id`, `user`,
+`users`) normally take a plain value, but also accept a reference for an
+operator who wants the value — sensitive or not — kept out of the config
+file too. A plain value works exactly as before: it is only treated as a
+reference when its prefix, up to the first `:`, matches one of the schemes
+above (so a `https://...` URL, an ordinary filesystem path, or a bare
+username all pass through untouched).
 
 `file:` and `encoded:` writes are atomic — written to a temporary file in the
 same directory, `chmod 0600`, then renamed — so a crash mid-write cannot leave a
@@ -97,6 +96,7 @@ truncated session behind.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `state_dir` | string | `/var/lib/msggw` | Everything persisted that is not a secret. |
+| `root_dir` | string | — | **Required, must be an absolute path.** Root of the persistent volume for secrets managed at runtime — today, just each user's Google Messages session (see [`gmessages`](#gmessages)). Distinct from `state_dir`: the two commonly sit on different volumes, and nothing conflates them. |
 | `backend` | object | — | Storage backend selection and settings; see [Storage backend](#storage-backend). |
 | `users` | list of objects | — | **Required, at least one entry.** One tenant per entry — see [`users`](#users). |
 
@@ -148,6 +148,29 @@ network filesystems (NFS and some cluster/CSI volume backends in particular)
 — using one of those as the volume can corrupt the database under concurrent
 access. A local, host-backed volume is the safe choice.
 
+**`root_dir` needs the same durable-volume treatment as `state_dir`, for the
+same reason.** Every user's session lives under `root_dir/gmessages/`, and
+the daemon does nothing beyond writing there. In a container, mount
+`root_dir` onto a persistent, local, host-backed volume too — `root_dir` and
+`state_dir` don't need to be different volumes, only different config
+values.
+
+**Upgrading from a hand-written `session_ref`?** Older configurations wrote
+`gmessages.session_ref` by hand, per user. That field no longer exists: the
+daemon now looks for the session at
+`encoded:$root_dir/gmessages/$name_session.enc` instead — almost certainly
+not the old hand-written path. Move the existing file there once, by hand,
+on the data volume, before restarting:
+
+```bash
+mkdir -p $root_dir/gmessages
+mv <old session_ref path> $root_dir/gmessages/<name>_session.enc
+```
+
+Skipping this isn't catastrophic — `status NAME` reports `NOT PAIRED` and the
+daemon retries pairing on startup exactly like any never-paired user — but it
+means re-pairing with fresh cookies for no reason.
+
 A PostgreSQL DSN contains a password, so — like `mattermost.token_ref` — it is
 given as a [secret reference](#secret-references), not a plain string:
 
@@ -165,7 +188,7 @@ given as a [secret reference](#secret-references), not a plain string:
 
 The resolved value is the DSN itself, e.g.
 `postgres://user:pass@host:5432/msggw?sslmode=disable`. `backend.postgres.dsn_ref`
-does not need to be writable — unlike a user's `gmessages.session_ref` — since
+does not need to be writable — unlike a user's Google Messages session — since
 the daemon never rewrites it.
 
 ---
@@ -272,8 +295,8 @@ Everything else in this file (`mattermost`, `backend`, `log`, `vault`,
 
 ```json
 "users": [
-  { "name": "jfgratton", "gmessages": { "session_ref": "..." }, "routing": { "..." } },
-  { "name": "kiddo",     "gmessages": { "session_ref": "..." }, "routing": { "..." } }
+  { "name": "jfgratton", "gmessages": { "..." }, "routing": { "..." } },
+  { "name": "kiddo",     "gmessages": { "..." }, "routing": { "..." } }
 ]
 ```
 
@@ -284,9 +307,13 @@ does not stop any other user's bridge, or the daemon as a whole.
 
 ### `gmessages`
 
+This user's session is not configured here at all — it is derived
+automatically as `encoded:$root_dir/gmessages/$name_session.enc` (see
+[`root_dir`](#top-level)), so there is nothing to set and nothing that can
+collide with another user's session.
+
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `session_ref` | secret reference | — | **Required.** Where this user's paired-device session lives. Must be writable. |
 | `ping_interval_seconds` | int | `60` | How often to ping the phone. `libgm` ignores anything outside 60–14400. |
 | `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
 | `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
@@ -298,43 +325,49 @@ Pairing itself is not a config setting — it is a separate, one-time step, once
 per user:
 
 ```bash
-message-gateway pair NAME --cookies-file cookies.json
+message-gateway pair NAME
 ```
 
 `NAME` must match one of the `name` entries under `users`.
 
 Google retired QR-code device pairing, so this authenticates as your Google
-account instead. Sign into `https://messages.google.com/web` in a **private**
-browser window, open devtools, and copy the `SID`, `HSID`, `SSID`, `OSID`,
-`APISID` and `SAPISID` cookies (and `__Secure-1PSIDTS` if present) into a JSON
-file:
+account instead. By default, `pair` opens a browser window for you to sign
+into that account — nothing to copy, nothing to configure. Once you're
+signed in, the window closes on its own and the daemon shows an emoji;
+tapping the matching one on Google Messages on the phone confirms the
+pairing. On success, the session is written to the derived path
+`root_dir/gmessages/NAME_session.enc` (see [`gmessages`](#gmessages)), and
+`message-gateway daemon` needs no further interactive step to use it.
+
+For a headless server, an SSH-only box, or a scripted pairing pipeline where
+`pair` can't open a browser, a manual fallback exists: sign into
+`https://messages.google.com/web` yourself, open devtools, and copy the
+`SID`, `HSID`, `SSID`, `OSID`, `APISID` and `SAPISID` cookies (and
+`__Secure-1PSIDTS` if present) into a JSON file:
 
 ```json
 {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
  "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}
 ```
 
-Pass that file with `--cookies-file`, or pipe the JSON to stdin instead. The
-daemon then shows an emoji; tapping the matching one on Google Messages on the
-phone confirms the pairing. On success, the session is written to that user's
-`gmessages.session_ref`, and `message-gateway daemon` needs no further
-interactive step to use it.
+Reach it with `--cookies-file`, by piping that JSON to stdin, or with
+`--no-browser` — see `docs/RUNNING.md`, "Fallback: manual cookies", for the
+full walkthrough.
 
-**Checking whether a user has already paired** — a session at their
-`gmessages.session_ref` *is* the pairing state; there is no separate flag.
-`message-gateway status [NAME]` reads that reference (for every user, or just
-`NAME`) and reports `NOT PAIRED — run "msg-gw pair NAME"` or `paired with phone
-<id>` (`--offline` skips the network round-trip that confirms Google still
-honours the session). Equivalently, checking for a non-empty file (or secret)
-at that reference works directly — an empty file counts as "not paired," the
-same as a missing one (this is what `message-gateway logout NAME --local-only`
-leaves behind).
+**Checking whether a user has already paired** — a session at their derived
+path *is* the pairing state; there is no separate flag.
+`message-gateway status [NAME]` reads it (for every user, or just `NAME`) and
+reports `NOT PAIRED — run "msg-gw pair NAME"` or `paired with phone <id>`
+(`--offline` skips the network round-trip that confirms Google still honours
+the session). Equivalently, checking for a non-empty file at that path works
+directly — an empty file counts as "not paired," the same as a missing one
+(this is what `message-gateway logout NAME --local-only` leaves behind).
 
 **Restarting does not re-trigger pairing.** `daemon` loads each user's stored
 session on startup and reconnects with it; it never launches the pairing flow
-itself. As long as `gmessages.session_ref` sits on storage that survives a
-restart — the same volume-mount caveat as [`backend.sqlite.path`](#storage-backend)
-— a restarted container reconnects every user silently.
+itself. As long as `root_dir` sits on storage that survives a restart — see
+the volume-mount caveat [above](#storage-backend) — a restarted container
+reconnects every user silently.
 
 **Pairing a user in an unattended container.** If a user has no session yet,
 that user's bridge does not fail the whole daemon: it retries for 5 attempts,
@@ -346,7 +379,11 @@ docker exec -it msggw message-gateway pair NAME --cookies-file cookies.json
 docker logs -f msggw
 ```
 
-Treat the cookies file itself as a bearer credential for the Google account —
+`docker exec -it` still gives `pair` an interactive terminal but no display
+to open a browser in, so the manual `--cookies-file` fallback is what
+applies inside a container — get the cookies JSON onto the container first
+(a bind mount, `docker cp`, or similar). Treat the cookies file itself as a
+bearer credential for the Google account —
 delete it once pairing succeeds, and keep it out of anywhere `docker logs`
 or shell history would retain it.
 
@@ -386,8 +423,7 @@ they would locally, but on their own laptop or phone, with `--remote` and
 ```bash
 msg-gw pair myuser1@gmail.com \
   --remote https://msggw.example.net:8443 \
-  --token-file ~/.msggw-pairing-token \
-  --cookies-file cookies.json
+  --token-file ~/.msggw-pairing-token
 ```
 
 `--remote` needs no other `msg-gw` configuration on that machine — no `-c`
@@ -397,14 +433,15 @@ the `MSGGW_PAIR_TOKEN` environment variable. `--insecure-skip-verify` skips
 TLS certificate verification, for testing against a self-signed listener
 only.
 
-Cookies are still read the same way as local pairing — `--cookies-file` or
-stdin, still the `SID`/`HSID`/`SSID`/`OSID`/`APISID`/`SAPISID` set copied out
-of a signed-in browser session at `https://messages.google.com/web`. What
-changes is that the daemon never has to be told them by hand and never signs
-into Google itself: the daemon relays the emoji back, waits for the phone to
-confirm, verifies the session by reconnecting, and only then reports success —
-the same guarantee local pairing gives, over the network instead of a shell
-on the daemon's host.
+Cookies are still obtained the same way as local pairing — by default, a
+browser window opens right there on the operator's own device for them to
+sign in (or, on a headless device, the same `--cookies-file`/stdin/
+`--no-browser` fallback local pairing uses). What changes is that the daemon
+never has to be told them by hand and never signs into Google itself: the
+daemon relays the emoji back, waits for the phone to confirm, verifies the
+session by reconnecting, and only then reports success — the same guarantee
+local pairing gives, over the network instead of a shell on the daemon's
+host.
 
 ### `routing`
 
@@ -581,19 +618,23 @@ only when each routed channel holds exactly one conversation.
 ### Two people, sharing one daemon and one bot
 
 ```json
+"root_dir": "/data",
 "users": [
   {
     "name": "jfgratton",
-    "gmessages": { "session_ref": "encoded:/data/gmessages/jfgratton.session.enc" },
     "routing": { "default": { "type": "direct", "user": "jfgratton" } }
   },
   {
     "name": "kiddo",
-    "gmessages": { "session_ref": "encoded:/data/gmessages/kiddo.session.enc" },
     "routing": { "default": { "type": "direct", "user": "kiddo" } }
   }
 ]
 ```
+
+Neither user needs a `gmessages.session_ref` — `root_dir` alone is enough
+for the daemon to derive `encoded:/data/gmessages/jfgratton_session.enc` and
+`encoded:/data/gmessages/kiddo_session.enc` respectively, with no risk of the
+two colliding.
 
 Each user pairs separately (`msg-gw pair jfgratton`, `msg-gw pair kiddo`) and
 runs independently once the daemon starts — one's phone being unreachable, or

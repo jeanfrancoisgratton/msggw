@@ -1,5 +1,6 @@
 {
   "state_dir": "/var/lib/msggw",
+  "root_dir": "/data",
   "backend": {
     "driver": "sqlite",
     "sqlite": {
@@ -38,7 +39,6 @@
     {
       "name": "jfgratton",
       "gmessages": {
-        "session_ref": "encoded:/data/gmessages/jfgratton.session.enc",
         "ping_interval_seconds": 60,
         "force_rcs": true,
         "mark_read_on_bridge": false,
@@ -80,7 +80,6 @@
     {
       "name": "kiddo",
       "gmessages": {
-        "session_ref": "encoded:/data/gmessages/kiddo.session.enc",
         "force_rcs": true
       },
       "routing": {

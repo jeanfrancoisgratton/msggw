@@ -89,9 +89,12 @@ At minimum, fill in:
   from step 2.
 - `backend` — `sqlite` (the default, a file under `state_dir`) or `postgres`;
   see [Storage backend](CONFIGURATION.md#storage-backend).
-- `state_dir` — where sessions and the database live; make sure it's on a
-  **local, host-backed** volume if you're in a container, not a network
-  filesystem (SQLite's locking is unreliable over NFS and similar).
+- `state_dir` — where the database and in-flight media live.
+- `root_dir` — where every user's Google Messages session lives, derived
+  automatically per user (see step 4 below). Both `state_dir` and `root_dir`
+  should be on a **local, host-backed** volume if you're in a container, not
+  a network filesystem (SQLite's locking is unreliable over NFS and
+  similar).
 
 Every credential in this file is a *reference*, never a value — see [Secret
 references](CONFIGURATION.md#secret-references). The full key-by-key
@@ -104,12 +107,10 @@ its own routing. A single-person deployment is just a `users` array of
 length one:
 
 ```json
+"root_dir": "/var/lib/msggw",
 "users": [
   {
     "name": "jfgratton",
-    "gmessages": {
-      "session_ref": "encoded:/var/lib/msggw/jfgratton.session.enc"
-    },
     "routing": {
       "default": { "type": "channel", "team": "myteam", "channel": "messages" }
     }
@@ -118,13 +119,13 @@ length one:
 ```
 
 `name` is what that person will pass to `message-gateway pair NAME` — see
-[Setting up a client (user)](#setting-up-a-client-user). `gmessages.session_ref`
-must use a *writable* scheme (`file:`, `encoded:`, or `vault:`), because
-`libgm` refreshes the Google auth token while running and the refreshed
-session has to be persisted. Routing decides which Mattermost channel, DM, or
-group each conversation lands in — see
-[`routing`](CONFIGURATION.md#routing) for the full set of destinations and
-rules.
+[Setting up a client (user)](#setting-up-a-client-user). It also feeds the
+session path the daemon derives automatically:
+`encoded:root_dir/gmessages/name_session.enc` — there is no `session_ref` to
+write by hand, and no way for two users to collide on the same file. Routing
+decides which Mattermost channel, DM, or group each conversation lands in —
+see [`routing`](CONFIGURATION.md#routing) for the full set of destinations
+and rules.
 
 If any of your users will pair remotely instead of on this host (see
 [Remote pairing](#remote-pairing--client-mode) below), this is also where you
@@ -171,7 +172,7 @@ WantedBy=multi-user.target
 ```
 
 Whatever supervises it, make sure `state_dir` (and the SQLite file inside it,
-if that's your backend) survives a restart — see [Storage
+if that's your backend) and `root_dir` both survive a restart — see [Storage
 backend](CONFIGURATION.md#storage-backend). Restarting the daemon does not
 re-trigger pairing: it loads each user's stored session and reconnects
 silently.

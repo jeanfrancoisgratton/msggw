@@ -129,6 +129,12 @@ func (c *Config) applyDefaults() {
 func (c *Config) Validate() error {
 	var problems []error
 
+	if c.RootDir == "" {
+		problems = append(problems, errors.New("root_dir is required"))
+	} else if !filepath.IsAbs(c.RootDir) {
+		problems = append(problems, fmt.Errorf("root_dir %q must be an absolute path", c.RootDir))
+	}
+
 	switch c.Backend.Driver {
 	case DatabaseDriverSQLite:
 		// The postgres block, if present, is simply not read.
@@ -153,19 +159,13 @@ func (c *Config) Validate() error {
 
 		if user.Name == "" {
 			problems = append(problems, fmt.Errorf("%s: name is required", label))
+		} else if strings.Contains(user.Name, "/") {
+			problems = append(problems, fmt.Errorf(
+				"%s: name %q must not contain \"/\": it is used as a filesystem path component in the derived session path", label, user.Name))
 		} else if seenNames[user.Name] {
 			problems = append(problems, fmt.Errorf("%s: name %q is used by more than one user", label, user.Name))
 		} else {
 			seenNames[user.Name] = true
-		}
-
-		if user.GMessages.SessionRef == "" {
-			problems = append(problems, fmt.Errorf("%s: gmessages.session_ref is required", label))
-		} else if strings.HasPrefix(user.GMessages.SessionRef, "env:") ||
-			strings.HasPrefix(user.GMessages.SessionRef, "literal:") {
-			problems = append(problems, fmt.Errorf(
-				"%s: gmessages.session_ref is %q, but the session has to be written back when its auth token is refreshed: use file:, encoded: or vault:",
-				label, user.GMessages.SessionRef))
 		}
 
 		if err := user.Routing.Default.Validate(); err != nil {
@@ -280,6 +280,16 @@ func (r Rule) validate() error {
 	}
 
 	return errors.Join(problems...)
+}
+
+// SessionRef derives where a user's Google Messages session lives: always
+// a local encoded: file under RootDir, since libgm rewrites it roughly
+// hourly and it therefore cannot live behind Vault or Postgres. It is a
+// pure function of RootDir and user.Name — both already validated
+// non-empty and path-safe by Validate — so unlike SQLitePath/MattermostURL
+// this does no I/O and cannot fail.
+func (c *Config) SessionRef(user UserConfig) string {
+	return "encoded:" + filepath.Join(c.RootDir, "gmessages", user.Name+"_session.enc")
 }
 
 // SQLitePath resolves backend.sqlite.path — which may be a plain path or a

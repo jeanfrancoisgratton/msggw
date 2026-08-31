@@ -49,9 +49,10 @@ func TestSampleIsValid(t *testing.T) {
 // minimalConfig is the smallest configuration Load accepts: one user, one
 // routing default, a Mattermost URL and token.
 const minimalConfig = `{
+  "root_dir": "/tmp",
   "mattermost": {"url": "https://mm.example.net", "token_ref": "env:TOKEN"},
   "users": [
-    {"name": "u1", "gmessages": {"session_ref": "file:/tmp/session.json"},
+    {"name": "u1",
      "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}
   ]
 }`
@@ -82,9 +83,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 }
 
 func TestLoadRejectsUnknownFields(t *testing.T) {
-	body := `{"state_dir": "/tmp", "state_directory": "/tmp",
+	body := `{"state_dir": "/tmp", "state_directory": "/tmp", "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	  "users": [{"name": "u1",
 	             "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}]}`
 
 	_, err := Load(writeConfig(t, body))
@@ -96,20 +97,60 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 	}
 }
 
-// TestSessionRefMustBeWritable covers the trap that would otherwise cost a
-// re-pairing on every restart: libgm refreshes its auth token and the new one
-// has to go somewhere.
-func TestSessionRefMustBeWritable(t *testing.T) {
-	for _, ref := range []string{"env:GM_SESSION", "literal:{}"} {
-		body := strings.Replace(minimalConfig, "file:/tmp/session.json", ref, 1)
-		_, err := Load(writeConfig(t, body))
-		if err == nil {
-			t.Errorf("session_ref %q was accepted, but it cannot be written back", ref)
-			continue
-		}
-		if !strings.Contains(err.Error(), "session_ref") {
-			t.Errorf("session_ref %q: the error does not explain the problem: %v", ref, err)
-		}
+// TestRootDirIsRequired covers the field every user's derived session path
+// now depends on: without it, SessionRef would silently join onto "", not
+// fail loudly.
+func TestRootDirIsRequired(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"root_dir": "/tmp",`, "", 1)
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a missing root_dir was accepted")
+	}
+	if !strings.Contains(err.Error(), "root_dir") {
+		t.Errorf("the error does not mention root_dir: %v", err)
+	}
+}
+
+// TestRootDirMustBeAbsolute covers a relative root_dir, which would resolve
+// against whatever directory the daemon happens to be started from —
+// silently undermining the whole point of deriving session paths
+// deterministically.
+func TestRootDirMustBeAbsolute(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"root_dir": "/tmp",`, `"root_dir": "data",`, 1)
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a relative root_dir was accepted")
+	}
+	if !strings.Contains(err.Error(), "root_dir") {
+		t.Errorf("the error does not mention root_dir: %v", err)
+	}
+}
+
+// TestSessionRefDerivedFromRootDirAndName guards the actual contract: a
+// user's session always lives at a deterministic, collision-free path built
+// from root_dir and their name, never something hand-written.
+func TestSessionRefDerivedFromRootDirAndName(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimalConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := "encoded:/tmp/gmessages/u1_session.enc"
+	if got := cfg.SessionRef(cfg.Users[0]); got != want {
+		t.Errorf("SessionRef() = %q, want %q", got, want)
+	}
+}
+
+// TestUserNameRejectsSlash covers the path-escape footgun a "/" in a user's
+// name would otherwise be, now that Name feeds a filesystem path component
+// via SessionRef.
+func TestUserNameRejectsSlash(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"name": "u1"`, `"name": "u/1"`, 1)
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a user name containing \"/\" was accepted")
+	}
+	if !strings.Contains(err.Error(), `"u/1"`) {
+		t.Errorf("the error does not name the offending value: %v", err)
 	}
 }
 
@@ -147,8 +188,9 @@ func TestDestinationValidate(t *testing.T) {
 
 func TestRuleWithoutCriteriaIsRejected(t *testing.T) {
 	body := `{
+	  "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	  "users": [{"name": "u1",
 	    "routing": {
 	      "default": {"type": "channel", "team": "t", "channel": "c"},
 	      "rules": [{"name": "oops", "destination": {"type": "direct", "user": "jf"}}]
@@ -311,8 +353,9 @@ func TestMattermostURLRejectsBadResolvedValue(t *testing.T) {
 
 func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
 	body := `{
+	  "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "users": [{"name": "u1", "gmessages": {"session_ref": "file:/tmp/s"},
+	  "users": [{"name": "u1",
 	    "routing": {
 	      "default": {"type": "channel", "team": "t", "channel": "c"},
 	      "rules": [{"name": "both", "groups_only": true, "directs_only": true,
@@ -372,11 +415,12 @@ func TestUsersMustHaveAtLeastOne(t *testing.T) {
 // users named the same thing would collide in the tenant column.
 func TestUserNameMustBeUnique(t *testing.T) {
 	body := `{
+	  "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [
-	    {"name": "dup", "gmessages": {"session_ref": "file:/tmp/a"},
+	    {"name": "dup",
 	     "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}},
-	    {"name": "dup", "gmessages": {"session_ref": "file:/tmp/b"},
+	    {"name": "dup",
 	     "routing": {"default": {"type": "channel", "team": "t", "channel": "b"}}}
 	  ]}`
 
@@ -394,8 +438,9 @@ func TestUserNameMustBeUnique(t *testing.T) {
 // tenant column.
 func TestUserNameIsRequired(t *testing.T) {
 	body := `{
+	  "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
-	  "users": [{"gmessages": {"session_ref": "file:/tmp/a"},
+	  "users": [{
 	    "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}}]}`
 
 	_, err := Load(writeConfig(t, body))
