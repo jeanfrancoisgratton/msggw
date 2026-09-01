@@ -63,8 +63,9 @@ What has **not** happened is a live run: no real Android phone has been paired, 
 Mattermost server has been posted to. Everything touching the Google Messages protocol goes
 through `libgm` and is unverified in practice.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for what is done, [docs/ISSUES.md](docs/ISSUES.md) for
-the known limits, and [docs/TODO.md](docs/TODO.md) for what is left.
+See [docs/CHANGELOG.md](docs/CHANGELOG.md) for what has shipped, and
+[docs/SOLUTION.md](docs/SOLUTION.md#13-known-rough-edges) for the known limits and untested
+paths.
 
 ---
 
@@ -87,13 +88,25 @@ go test ./...
 ## Using it
 
 ```text
-msg-gw config sample     print a starting configuration
-msg-gw config check      validate it and resolve every secret it names
-msg-gw pair NAME         pair one user with Google Messages using account cookies
-msg-gw daemon            run the bridge, for every configured user
-msg-gw status [NAME]     report on pairing, the bot and the mappings, for one or every user
-msg-gw logout NAME       revoke one user's pairing and delete their session
+msg-gw config sample            print a starting configuration
+msg-gw config check             validate it and resolve every secret it names
+msg-gw pair NAME                pair one user with Google Messages using account cookies
+msg-gw daemon                   run the bridge, for every configured user
+msg-gw status [NAME]            report on pairing, the bot and the mappings, for one or every user
+msg-gw logout NAME              revoke one user's pairing and delete their session
+msg-gw reload                   ask a running daemon to re-read config.json (SIGHUP)
+msg-gw rules list NAME          list a user's routing rules
+msg-gw rules add NAME           add a routing rule (see --help for match/destination flags)
+msg-gw rules remove NAME INDEX  remove routing rule INDEX
+msg-gw rules pull NAME          fetch a user's routing rules from a remote daemon
+msg-gw rules push NAME          replace a user's routing rules on a remote daemon
+msg-gw version                  print the version
 ```
+
+`reload` signals a locally running daemon by its pid file, and `rules list`/`add`/`remove` edit
+`config.json` directly — none of the three touch the network. `rules pull`/`push --remote`
+are the exception: "client mode" reaching a daemon over the network instead, the same way
+remote pairing does. Both are covered in [docs/RUNNING.md](docs/RUNNING.md).
 
 `NAME` matches a `name` entry under `users` in the configuration — one per
 paired phone. A single-person deployment just has one entry.
@@ -461,7 +474,7 @@ linked device does; the user approves the pairing from Google Messages on the ph
 credentials are then persisted so normal operation needs no repeated interactive
 authentication, with restrictive filesystem permissions and optional support for an external
 secret store (Vault). Each user in the configuration pairs, and is authenticated, independently
-of every other one — see [MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
+of every other one — see [Multi-tenancy](docs/SOLUTION.md#7-multi-tenancy).
 
 ```text
 msg-gw pair NAME
@@ -556,10 +569,7 @@ The trade-off is explicit and accepted:
 | [docs/RUNNING.md](docs/RUNNING.md) | How to set up the daemon, and how to pair a client (user) |
 | [docs/SOLUTION.md](docs/SOLUTION.md) | Full design document (authoritative) |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference: routing, storage backends, secrets, every key |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features and target releases |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Release history |
-| [docs/TODO.md](docs/TODO.md) | Pending tasks |
-| [docs/ISSUES.md](docs/ISSUES.md) | Known issues |
 
 ---
 

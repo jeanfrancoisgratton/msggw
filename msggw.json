@@ -3,7 +3,7 @@
   "binaryname": "msg-gw",
   "goversion": "1.27.0",
   "versionnumber": "0.9.0",
-  "releasenumber": "1",
+  "releasenumber": "2",
   "description": "Messages <-> Mattermost bridge",
   "maintainer": "J.F. Gratton <jean-francois@famillegratton.net>",
   "packager": "Package builder <builder@famillegratton.net>",
