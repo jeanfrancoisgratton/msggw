@@ -131,6 +131,12 @@ If any of your users will pair remotely instead of on this host (see
 enable the [`listener`](CONFIGURATION.md#listener) and set that user's
 `remote_pairing.token_ref`.
 
+Hand-writing the entry above is not the only way to get there: `message-gateway
+pair NAME --mattermost-user USERNAME` creates it for you the first time NAME
+is paired, routed to a direct message with USERNAME — see [Local
+pairing](#local-pairing--you-have-shell-access-to-the-daemons-host) below.
+Useful either way.
+
 ### 5. Validate and run
 
 ```bash
@@ -181,10 +187,11 @@ silently.
 ## Setting up a client (user)
 
 This is the per-person, one-time step that links your Android phone's Google
-Messages app to one `users[]` entry the operator has already created for you
-(step 4 above). Pairing is not a config setting — it's the `pair` command,
-run once per user, and the resulting session is what makes `status` report
-"paired" from then on.
+Messages app to one `users[]` entry — either one the operator already created
+for you (step 4 above), or one `pair` creates on the spot the first time you
+run it, given `--mattermost-user`. Pairing is not just a config setting — it's
+the `pair` command, run once per user, and the resulting session is what makes
+`status` report "paired" from then on.
 
 Either way, pairing needs a signed-in Google Messages web session — Google
 retired QR-code device pairing, so `pair` authenticates as your Google
@@ -212,7 +219,19 @@ message-gateway pair NAME
 ```
 
 `NAME` must match your `name` entry under `users` in the operator's
-configuration. A browser window opens to Google's sign-in page; sign in
+configuration — unless it doesn't exist yet, in which case add
+`--mattermost-user YOUR_MATTERMOST_USERNAME` and `pair` creates it for you,
+routed to a direct message with that username:
+
+```bash
+message-gateway pair NAME --mattermost-user YOUR_MATTERMOST_USERNAME
+```
+
+`--email YOUR_GOOGLE_ACCOUNT` is optional alongside that — it is recorded for
+`status` to show later, never checked against the account you actually sign
+into below. Neither flag does anything once NAME already exists.
+
+Either way, a browser window opens to Google's sign-in page; sign in
 there as you normally would. Once you're signed in, the window closes and
 the command prints an emoji:
 

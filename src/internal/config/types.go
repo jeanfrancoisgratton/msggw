@@ -155,6 +155,15 @@ type GMessagesConfig struct {
 	// BackfillCount is how many recent messages to fetch for a conversation the
 	// first time it is bridged. 0 disables backfill.
 	BackfillCount int `json:"backfill_count,omitempty"`
+
+	// GoogleAccount is the email address of the Google account this user is
+	// expected to pair with, as recorded by "msg-gw pair" (its --email flag)
+	// when it provisions a new user. It is documentation only: nothing
+	// resolves or verifies it against the actual signed-in account during
+	// pairing — the interactive browser sign-in determines the real account,
+	// this just gives an operator managing several tenants a record of which
+	// one each was supposed to be.
+	GoogleAccount string `json:"google_account,omitempty"`
 }
 
 // MattermostConfig covers the Mattermost side of the bridge.
