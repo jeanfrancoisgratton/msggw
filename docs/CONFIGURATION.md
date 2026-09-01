@@ -534,12 +534,12 @@ msg-gw rules remove jfgratton 1
 
 The change is validated the same way `msg-gw config check` validates this
 file, and is written to disk only once the result loads cleanly. It edits
-`config.json` directly, in place — there is no live-reload yet, so the
-running daemon needs a restart to pick up the change. See `msg-gw rules
---help` for the full flag reference (`--to-channel`, `--to-channel-id`,
-`--to-user`, `--to-users` for destinations; `--conversation-id`,
-`--name-pattern`, `--groups-only`, `--directs-only` alongside `--phone` for
-criteria).
+`config.json` directly, in place — the running daemon does not pick up the
+change on its own; run `msg-gw reload` afterwards (see [Reloading a running
+daemon](RUNNING.md#reloading-a-running-daemon)). See `msg-gw rules --help`
+for the full flag reference (`--to-channel`, `--to-channel-id`, `--to-user`,
+`--to-users` for destinations; `--conversation-id`, `--name-pattern`,
+`--groups-only`, `--directs-only` alongside `--phone` for criteria).
 
 #### Threads
 

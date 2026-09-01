@@ -22,8 +22,8 @@ var rulesCmd = &cobra.Command{
 
 A change made here is validated exactly as the daemon validates config.json
 at startup — see "msg-gw config check" — and is only written to disk once the
-result loads cleanly. There is no live-reload yet: the running daemon does
-not pick up the change until it is restarted.`,
+result loads cleanly. The running daemon does not pick up the change on its
+own; run "msg-gw reload" (or send it SIGHUP, or restart it) afterwards.`,
 }
 
 var rulesListCmd = &cobra.Command{
@@ -103,7 +103,8 @@ and exactly one destination:
 
 The change is validated the same way "msg-gw config check" validates
 config.json, and only written if the result still loads cleanly — but the
-running daemon needs a restart to pick it up.
+running daemon does not pick it up until it is reloaded (see "msg-gw
+reload").
 
 Example:
 
@@ -153,7 +154,7 @@ Example:
 
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "Added rule %d for %s: %s -> %s\n", position, args[0], ruleCriteria(rule), dest.String())
-		fmt.Fprintln(out, "Restart the daemon to pick up the change.")
+		fmt.Fprintln(out, `Run "msg-gw reload" to pick up the change.`)
 		return nil
 	},
 }
@@ -166,7 +167,8 @@ NAME") for the user named NAME.
 
 The change is validated the same way "msg-gw config check" validates
 config.json — removing a rule cannot itself make the configuration invalid,
-but the running daemon still needs a restart to pick up the change.`,
+but the running daemon still needs to be reloaded (see "msg-gw reload") to
+pick up the change.`,
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -206,7 +208,7 @@ but the running daemon still needs a restart to pick up the change.`,
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "Removed rule %d for %s: %s -> %s\n",
 			index, args[0], ruleCriteria(removed), removed.Destination.String())
-		fmt.Fprintln(out, "Restart the daemon to pick up the change.")
+		fmt.Fprintln(out, `Run "msg-gw reload" to pick up the change.`)
 		return nil
 	},
 }

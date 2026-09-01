@@ -25,6 +25,7 @@ the other: set up the daemon, then pair yourself as its one user.
   - [5. Add, edit and remove routing rules](#5-add-edit-and-remove-routing-rules)
   - [6. Validate and run](#6-validate-and-run)
   - [7. Keep it running](#7-keep-it-running)
+  - [Reloading a running daemon](#reloading-a-running-daemon)
 - [Setting up a client (user)](#setting-up-a-client-user)
   - [Local pairing — you have shell access to the daemon's host](#local-pairing--you-have-shell-access-to-the-daemons-host)
   - [Remote pairing — client mode](#remote-pairing--client-mode)
@@ -182,16 +183,15 @@ than by convention:
   (bad regex, malformed destination, missing team/channel, and so on) is
   rejected with an explanation and `config.json` is left untouched.
 
-What this does **not** do is reload the running daemon. There is no
-live-reload yet, so a rule change has no effect until the daemon is
-restarted (see [Keep it running](#7-keep-it-running)) — `rules add`/`rules
-remove` print a reminder to that effect. Restarting is safe to do at any
-time: it reloads each user's stored session and reconnects silently (see
-step 7), it does not re-trigger pairing. Also note that a rule only applies
-to a conversation the **first** time it's bridged — changing the rules later
-does not move an already-bridged conversation's existing thread, so this is
-a good one to get right before a conversation shows up for the first time,
-not necessarily something to restart the daemon for on every edit.
+What this does **not** do is apply the change to a running daemon — `rules
+add`/`rules remove` print a reminder that you still need to run `message-gateway
+reload` (or send `SIGHUP`, or restart) afterwards, in the same process, for
+it to take effect. See [Reloading a running
+daemon](#reloading-a-running-daemon) below. Also note that a rule only
+applies to a conversation the **first** time it's bridged — changing the
+rules later does not move an already-bridged conversation's existing thread,
+so this is a good one to get right before a conversation shows up for the
+first time, not necessarily something to reload for on every single edit.
 
 See [`routing`](CONFIGURATION.md#routing) for the full field reference and
 matching semantics, and `msg-gw rules --help` / `msg-gw rules add --help` for
@@ -229,6 +229,7 @@ After=network-online.target
 
 [Service]
 ExecStart=/opt/sbin/message-gateway daemon
+ExecReload=/opt/sbin/message-gateway reload
 Restart=on-failure
 User=msggw
 
@@ -236,11 +237,80 @@ User=msggw
 WantedBy=multi-user.target
 ```
 
+`ExecReload` wires `systemctl reload msg-gw` to [`msg-gw
+reload`](#reloading-a-running-daemon) below, instead of the unit's default of
+sending `SIGHUP` itself — either one works, but going through the command
+gets you its confirmation message and its error if the daemon isn't running
+at all.
+
 Whatever supervises it, make sure `state_dir` (and the SQLite file inside it,
 if that's your backend) and `root_dir` both survive a restart — see [Storage
 backend](CONFIGURATION.md#storage-backend). Restarting the daemon does not
 re-trigger pairing: it loads each user's stored session and reconnects
 silently.
+
+### Reloading a running daemon
+
+A full restart is disruptive in a way that isn't always acceptable — most of
+all in a container whose entrypoint does `exec message-gateway daemon`,
+where the daemon *is* the container's PID 1: there's no supervisor sitting
+above it to bring it back if it exits, and no separate process to restart it
+without also restarting the container. `message-gateway reload` (or sending
+the daemon `SIGHUP` directly — `kill -HUP 1` inside that container) asks the
+*same, already-running process* to re-read `config.json` and pick up the
+change instead:
+
+```bash
+message-gateway reload
+```
+
+This finds the daemon via a pid file it writes at
+`<state_dir>/msggw.pid` on startup — resolved from the same `--config` (or
+default paths) you'd give the daemon itself, so as long as `reload` is run
+against the same configuration, there's nothing else to point it at. It
+prints confirmation once the signal is sent, but sending a signal isn't the
+same as confirming the reload worked — check the daemon's own logs for a
+line starting with `reload:` to see whether the new configuration was
+actually valid and got applied.
+
+What a reload does, precisely:
+
+- Re-reads and fully re-validates `config.json` — exactly what `msg-gw
+  config check` checks. **An invalid configuration is rejected outright and
+  logged**; the daemon keeps running on the configuration it already had,
+  same as `msg-gw rules`/`msg-gw config` refusing to write a change that
+  wouldn't load. A reload can never leave the daemon half-configured or
+  down because of a typo.
+- Once a new configuration is confirmed valid, restarts every user's Google
+  Messages bridge, the shared Mattermost connection, and the pairing
+  listener (if enabled) against it — all inside the same process, same PID,
+  same container. Every currently-connected user briefly drops and
+  reconnects; a user's Google Messages session itself is untouched (no
+  re-pairing), same as a full restart.
+- Does **not** retroactively move a conversation already bridged under an
+  old rule — same caveat as [rules](#5-add-edit-and-remove-routing-rules)
+  above: a rule is only consulted the first time a conversation is bridged.
+
+A reload picks up essentially any `config.json` change — a rules change,
+routing defaults, adding a `users[]` entry by hand, a new Mattermost token,
+even `backend`/`state_dir`/`root_dir` themselves, since everything
+downstream of the configuration is rebuilt from it on every reload, not just
+at cold start. The one wrinkle: the pid file `reload` looks for always lives
+under the `state_dir` the daemon *started* with — so a reload that changes
+`state_dir` picks up the new one for storage and sessions, but leaves a
+*later* `msg-gw reload` unable to find the running daemon at the new
+`state_dir`'s pid file path. Send `SIGHUP` directly in that specific case, or
+just restart normally instead.
+
+If the new configuration is valid but the daemon can't actually connect with
+it (Mattermost unreachable, the listener's port already taken, and similar)
+the reload fails past the validation step and the daemon exits — the same
+fate a cold start would have hit with that configuration — for your process
+supervisor (or container runtime) to restart it. That's a narrower failure
+mode than it sounds: content problems (a bad regex, a malformed destination)
+are always caught before anything is torn down; only genuine
+connectivity/environment problems can still bring the daemon down, and only
+after a reload was already requested with a config to blame in the logs.
 
 ---
 

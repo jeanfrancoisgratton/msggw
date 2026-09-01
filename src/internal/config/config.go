@@ -312,6 +312,14 @@ func (c *Config) SQLitePath() (string, error) {
 	return path, nil
 }
 
+// PIDFile is where "daemon" records its own process ID, so that "reload" can
+// find it without the operator having to track it separately. It is always
+// under StateDir — not configurable, since one daemon has exactly one
+// StateDir and there is no scenario where the two need to move independently.
+func (c *Config) PIDFile() string {
+	return filepath.Join(c.StateDir, "msggw.pid")
+}
+
 // MattermostURL resolves mattermost.url — which may be a plain URL or a
 // secret reference — and checks that the resolved value is still a URL.
 func (c *Config) MattermostURL() (string, error) {
