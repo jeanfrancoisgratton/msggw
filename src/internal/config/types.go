@@ -38,7 +38,7 @@ type Config struct {
 	// StateDir holds everything the daemon persists that is not a secret: the
 	// SQLite database (when Backend.Driver is sqlite), and downloaded media
 	// while it is in flight.
-	StateDir string `json:"state_dir"`
+	StateDir string `json:"state_dir,omitempty"`
 	// RootDir is the root of the persistent volume for secrets that are
 	// managed at runtime rather than provisioned by the operator — today,
 	// just each user's Google Messages session, which libgm rewrites roughly
