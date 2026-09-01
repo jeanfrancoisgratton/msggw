@@ -139,13 +139,24 @@ func runUser(ctx context.Context, cfg *config.Config, user config.UserConfig, lo
 	}
 
 	log.Info("bridge running",
-		"default_route", user.Routing.Default.String(),
+		"default_direct", user.Routing.DefaultDirect.String(),
+		"default_group", defaultGroupLog(user.Routing),
 		"routing_rules", len(user.Routing.Rules),
 		"threads", user.Routing.ThreadPerConversationEnabled())
 
 	if err := br.Run(ctx); err != nil {
 		log.Error("the bridge stopped", "error", err)
 	}
+}
+
+// defaultGroupLog renders routing.default_group for a log line, making the
+// fallback to default_direct (an unset destination, config.go's Validate
+// allows it) visible instead of printing "invalid destination".
+func defaultGroupLog(r config.RoutingConfig) string {
+	if r.DefaultGroup.Type == "" {
+		return "(same as default_direct)"
+	}
+	return r.DefaultGroup.String()
 }
 
 func startListener(ctx context.Context, cfg *config.Config, log *slog.Logger) error {

@@ -179,9 +179,17 @@ type MattermostConfig struct {
 }
 
 // RoutingConfig decides where in Mattermost a Google Messages conversation
-// shows up. Default applies to everything that no rule matches.
+// shows up. DefaultDirect and DefaultGroup apply to everything that no rule
+// matches, chosen by the conversation's own shape (one-to-one vs. group) —
+// the same distinction Rule.GroupsOnly/DirectsOnly use.
 type RoutingConfig struct {
-	Default Destination `json:"default"`
+	// DefaultDirect is used for a one-to-one conversation that no rule
+	// matches.
+	DefaultDirect Destination `json:"default_direct"`
+	// DefaultGroup is used for a group conversation that no rule matches.
+	// Left unset, it falls back to DefaultDirect — a deployment that does
+	// not care about the distinction only has to write one default.
+	DefaultGroup Destination `json:"default_group,omitempty"`
 	// Rules are evaluated in order; the first match wins.
 	Rules []Rule `json:"rules,omitempty"`
 

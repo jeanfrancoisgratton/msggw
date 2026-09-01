@@ -36,7 +36,7 @@ func directConversation(id, name string, phones ...string) gmessages.Conversatio
 }
 
 func TestRouteFallsBackToDefault(t *testing.T) {
-	router, err := NewRouter(config.RoutingConfig{Default: defaultDest})
+	router, err := NewRouter(config.RoutingConfig{DefaultDirect: defaultDest})
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -45,8 +45,8 @@ func TestRouteFallsBackToDefault(t *testing.T) {
 	if !sameDest(dest, defaultDest) {
 		t.Errorf("Route() = %v, want the default destination", dest)
 	}
-	if rule != "default" {
-		t.Errorf("rule = %q, want %q", rule, "default")
+	if rule != "default (direct)" {
+		t.Errorf("rule = %q, want %q", rule, "default (direct)")
 	}
 }
 
@@ -56,7 +56,7 @@ func TestRouteFallsBackToDefault(t *testing.T) {
 func TestRouteMatchesPhoneRegardlessOfFormatting(t *testing.T) {
 	dmDest := config.Destination{Type: config.DestDirect, User: "jfgratton"}
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "family",
 			Phones:      []string{"+1 (514) 555-1212"},
@@ -80,7 +80,7 @@ func TestRouteMatchesPhoneRegardlessOfFormatting(t *testing.T) {
 
 func TestRouteIgnoresOurOwnNumber(t *testing.T) {
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "self",
 			Phones:      []string{"+15140000000"},
@@ -92,15 +92,67 @@ func TestRouteIgnoresOurOwnNumber(t *testing.T) {
 	}
 
 	_, rule := router.Route(directConversation("c1", "Alice", "+15145551212"))
-	if rule != "default" {
+	if rule != "default (direct)" {
 		t.Errorf("a rule matched on our own number: rule = %q", rule)
+	}
+}
+
+// TestRouteDefaultGroupFallsBackToDefaultDirect covers the whole point of
+// making default_group optional: a router with no DefaultGroup set still
+// routes an unmatched group conversation somewhere, not to a zero-value
+// (and therefore invalid) destination.
+func TestRouteDefaultGroupFallsBackToDefaultDirect(t *testing.T) {
+	router, err := NewRouter(config.RoutingConfig{DefaultDirect: defaultDest})
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+
+	group := directConversation("g1", "Book club", "+15145551212", "+15145551213")
+	group.IsGroup = true
+
+	dest, rule := router.Route(group)
+	if !sameDest(dest, defaultDest) {
+		t.Errorf("Route() = %v, want DefaultDirect as the fallback", dest)
+	}
+	if rule != "default (direct)" {
+		t.Errorf("rule = %q, want %q", rule, "default (direct)")
+	}
+}
+
+// TestRouteUsesDefaultGroupWhenSet covers the opposite case: once
+// DefaultGroup is configured, an unmatched group conversation goes there
+// instead of DefaultDirect.
+func TestRouteUsesDefaultGroupWhenSet(t *testing.T) {
+	groupDest := config.Destination{Type: config.DestChannel, Team: "team", Channel: "groups"}
+	router, err := NewRouter(config.RoutingConfig{
+		DefaultDirect: defaultDest,
+		DefaultGroup:  groupDest,
+	})
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+
+	group := directConversation("g1", "Book club", "+15145551212", "+15145551213")
+	group.IsGroup = true
+
+	dest, rule := router.Route(group)
+	if !sameDest(dest, groupDest) {
+		t.Errorf("Route() = %v, want DefaultGroup", dest)
+	}
+	if rule != "default (group)" {
+		t.Errorf("rule = %q, want %q", rule, "default (group)")
+	}
+
+	// A one-to-one conversation is unaffected by DefaultGroup.
+	if dest, _ := router.Route(directConversation("c1", "Alice", "+15145551212")); !sameDest(dest, defaultDest) {
+		t.Errorf("one-to-one conversation routed to %v, want DefaultDirect", dest)
 	}
 }
 
 func TestRouteGroupsOnly(t *testing.T) {
 	groupDest := config.Destination{Type: config.DestChannel, Team: "team", Channel: "groups"}
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "groups",
 			GroupsOnly:  true,
@@ -127,7 +179,7 @@ func TestRouteGroupsOnly(t *testing.T) {
 func TestRouteShapeFilterNarrowsIdentityCriteria(t *testing.T) {
 	target := config.Destination{Type: config.DestChannel, Team: "team", Channel: "special"}
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "group with Alice",
 			GroupsOnly:  true,
@@ -156,7 +208,7 @@ func TestRouteFirstMatchingRuleWins(t *testing.T) {
 	second := config.Destination{Type: config.DestDirect, User: "second"}
 
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{
 			{Name: "first", Phones: []string{"+15145551212"}, Destination: first},
 			{Name: "second", NamePattern: "Alice", Destination: second},
@@ -175,7 +227,7 @@ func TestRouteFirstMatchingRuleWins(t *testing.T) {
 func TestRouteNamePatternMatchesTitle(t *testing.T) {
 	target := config.Destination{Type: config.DestChannel, Team: "team", Channel: "work"}
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "work",
 			NamePattern: "(?i)^acme ",
@@ -199,7 +251,7 @@ func TestRouteNamePatternMatchesTitle(t *testing.T) {
 func TestRouteFallsBackToNumbersWhenUnnamed(t *testing.T) {
 	target := config.Destination{Type: config.DestDirect, User: "jfgratton"}
 	router, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "unnamed",
 			NamePattern: `^\+1 514`,
@@ -217,7 +269,7 @@ func TestRouteFallsBackToNumbersWhenUnnamed(t *testing.T) {
 
 func TestNewRouterRejectsABadPattern(t *testing.T) {
 	_, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "broken",
 			NamePattern: "([",
@@ -231,7 +283,7 @@ func TestNewRouterRejectsABadPattern(t *testing.T) {
 
 func TestNewRouterRejectsAPhoneWithNoDigits(t *testing.T) {
 	_, err := NewRouter(config.RoutingConfig{
-		Default: defaultDest,
+		DefaultDirect: defaultDest,
 		Rules: []config.Rule{{
 			Name:        "broken",
 			Phones:      []string{"not a number"},

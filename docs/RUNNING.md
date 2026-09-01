@@ -111,7 +111,7 @@ length one:
   {
     "name": "jfgratton",
     "routing": {
-      "default": { "type": "channel", "team": "myteam", "channel": "messages" }
+      "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" }
     }
   }
 ]

@@ -81,7 +81,8 @@ could be read.`,
 
 		for _, user := range cfg.Users {
 			fmt.Fprintf(out, "\nuser %q:\n", user.Name)
-			fmt.Fprintf(out, "  default route : %s\n", user.Routing.Default.String())
+			fmt.Fprintf(out, "  default direct: %s\n", user.Routing.DefaultDirect.String())
+			fmt.Fprintf(out, "  default group : %s\n", defaultGroupLog(user.Routing))
 			fmt.Fprintf(out, "  routing rules : %d\n", len(user.Routing.Rules))
 			fmt.Fprintf(out, "  threads       : %v\n", user.Routing.ThreadPerConversationEnabled())
 			problems = append(problems, checkSecret(cmd, "  gmessages session", cfg.SessionRef(user), cfg, false, user.Name))

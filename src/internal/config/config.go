@@ -168,8 +168,13 @@ func (c *Config) Validate() error {
 			seenNames[user.Name] = true
 		}
 
-		if err := user.Routing.Default.Validate(); err != nil {
-			problems = append(problems, fmt.Errorf("%s: routing.default: %w", label, err))
+		if err := user.Routing.DefaultDirect.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("%s: routing.default_direct: %w", label, err))
+		}
+		if user.Routing.DefaultGroup.Type != "" {
+			if err := user.Routing.DefaultGroup.Validate(); err != nil {
+				problems = append(problems, fmt.Errorf("%s: routing.default_group: %w", label, err))
+			}
 		}
 		for j, rule := range user.Routing.Rules {
 			ruleLabel := fmt.Sprintf("%s: routing.rules[%d]", label, j)
