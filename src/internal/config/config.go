@@ -168,22 +168,8 @@ func (c *Config) Validate() error {
 			seenNames[user.Name] = true
 		}
 
-		if err := user.Routing.DefaultDirect.Validate(); err != nil {
-			problems = append(problems, fmt.Errorf("%s: routing.default_direct: %w", label, err))
-		}
-		if user.Routing.DefaultGroup.Type != "" {
-			if err := user.Routing.DefaultGroup.Validate(); err != nil {
-				problems = append(problems, fmt.Errorf("%s: routing.default_group: %w", label, err))
-			}
-		}
-		for j, rule := range user.Routing.Rules {
-			ruleLabel := fmt.Sprintf("%s: routing.rules[%d]", label, j)
-			if rule.Name != "" {
-				ruleLabel = fmt.Sprintf("%s: routing.rules[%d] (%s)", label, j, rule.Name)
-			}
-			if err := rule.validate(); err != nil {
-				problems = append(problems, fmt.Errorf("%s: %w", ruleLabel, err))
-			}
+		for _, problem := range validateRules(user.Routing.DefaultDirect, user.Routing.DefaultGroup, user.Routing.Rules) {
+			problems = append(problems, fmt.Errorf("%s: %w", label, problem))
 		}
 	}
 
@@ -265,7 +251,65 @@ func (d Destination) String() string {
 	}
 }
 
-func (r Rule) validate() error {
+// ValidateRules checks one user's routing.default_direct, routing.default_group
+// and routing.rules in isolation from the rest of config.json — the same
+// checks Validate applies per-user, factored out so a client can validate a
+// rules document locally (see rulesproto.RulesDocument) before submitting it,
+// without needing the rest of config.json to do it.
+func ValidateRules(defaultDirect, defaultGroup Destination, rules []Rule) error {
+	return errors.Join(validateRules(defaultDirect, defaultGroup, rules)...)
+}
+
+// validateRules is ValidateRules' implementation, returning each problem as
+// a separate error so Validate can prefix every one individually with the
+// user it belongs to, instead of collapsing them all behind one shared label.
+func validateRules(defaultDirect, defaultGroup Destination, rules []Rule) []error {
+	var problems []error
+
+	if err := defaultDirect.Validate(); err != nil {
+		problems = append(problems, fmt.Errorf("routing.default_direct: %w", err))
+	}
+	if defaultGroup.Type != "" {
+		if err := defaultGroup.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("routing.default_group: %w", err))
+		}
+	}
+	problems = append(problems, validateRuleList(rules)...)
+
+	return problems
+}
+
+// ValidateRuleList checks a list of rules in isolation from any
+// default_direct/default_group — each rule's own criteria, shape filters,
+// name_pattern and destination. This is the narrower check for a rules-only
+// push (see rulesproto.RulesUpdate): unlike ValidateRules, it says nothing
+// about whether a fallback destination is configured, since a rules-only
+// push cannot change that — default_direct/default_group are operator-set
+// and deliberately outside what "msg-gw rules push" can touch, so that a
+// user's own (or a generated) rules change can never leave them without a
+// working fallback that guarantees message delivery.
+func ValidateRuleList(rules []Rule) error {
+	return errors.Join(validateRuleList(rules)...)
+}
+
+func validateRuleList(rules []Rule) []error {
+	var problems []error
+	for j, rule := range rules {
+		ruleLabel := fmt.Sprintf("routing.rules[%d]", j)
+		if rule.Name != "" {
+			ruleLabel = fmt.Sprintf("routing.rules[%d] (%s)", j, rule.Name)
+		}
+		if err := rule.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("%s: %w", ruleLabel, err))
+		}
+	}
+	return problems
+}
+
+// Validate checks that a rule is well-formed in isolation: it has at least
+// one matching criterion, its shape filters aren't mutually exclusive, its
+// name_pattern (if any) compiles, and its destination is valid.
+func (r Rule) Validate() error {
 	var problems []error
 
 	if len(r.ConversationIDs) == 0 && len(r.Phones) == 0 && r.NamePattern == "" &&

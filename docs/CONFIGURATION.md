@@ -36,6 +36,7 @@ than a silently-applied default.
   - [`gmessages`](#gmessages)
   - [Pairing](#pairing)
   - [Client-mode pairing](#client-mode-pairing)
+  - [Remote rules management](#remote-rules-management)
   - [`routing`](#routing)
     - [Destinations](#destinations)
     - [Rules](#rules)
@@ -263,10 +264,18 @@ own device registers pairing material with the daemon, so the device doing
 the actual Google sign-in is never the daemon's own host — see
 [Client-mode pairing](#client-mode-pairing) and
 [docs/SOLUTION.md § Client-mode pairing](SOLUTION.md#client-mode-pairing)) at
-`/pair/{name}/start` and `/pair/{name}/wait`, plus a `/healthz` check. Both
-`/pair` routes require a per-user bearer token
-(`users[].remote_pairing.token_ref`); a user with no token configured gets a
-403 from them.
+`/pair/{name}/start` and `/pair/{name}/wait`, remote rules management (a
+user fetches and replaces their own routing rules — see
+[RUNNING.md § Remote rules management](RUNNING.md#remote-rules-management--client-mode))
+at `GET`/`PUT /rules/{name}`, plus a `/healthz` check. `/pair` routes require
+a per-user bearer token (`users[].remote_pairing.token_ref`); `/rules`
+routes require a separate one (`users[].remote_rules.token_ref`) — a user
+with no token configured for a given capability gets a 403 from its routes,
+independently of whether the other capability's token is set. The listener
+itself runs for the whole lifetime of the daemon process, not per
+configuration generation: a reload never drops a client's connection to
+it, and only rebinds it at all if `listener.port`/`cert_file`/`key_file`
+themselves changed.
 
 **TLS falls back to plain HTTP, loudly, rather than refusing to start.** If
 `cert_file`/`key_file` are unset, unreadable, or otherwise fail to load as a
@@ -293,6 +302,7 @@ Everything else in this file (`mattermost`, `backend`, `log`, `vault`,
 | `gmessages` | object | — | This user's Google Messages session and behaviour; see [`gmessages`](#gmessages). |
 | `routing` | object | — | This user's routing; see [`routing`](#routing). |
 | `remote_pairing` | object | — | Enables this user for client-mode pairing over the `listener`; see [Client-mode pairing](#client-mode-pairing). |
+| `remote_rules` | object | — | Enables this user to fetch and replace their own routing rules over the `listener`; see [RUNNING.md § Remote rules management](RUNNING.md#remote-rules-management--client-mode). A separate token from `remote_pairing` — independently grantable and revocable. |
 
 ```json
 "users": [
@@ -451,6 +461,40 @@ daemon relays the emoji back, waits for the phone to confirm, verifies the
 session by reconnecting, and only then reports success — the same guarantee
 local pairing gives, over the network instead of a shell on the daemon's
 host.
+
+### Remote rules management
+
+The listener also lets a paired user fetch and replace their own
+`routing.rules` over the network, instead of the operator running
+`msg-gw rules` on the daemon's host on their behalf. `routing.default_direct`
+and `routing.default_group` are shown alongside `rules` when fetching (for
+context) but stay operator-only — a push can never change them, deliberately:
+they are the fallback that guarantees a paired user keeps receiving messages
+somewhere even if their own rules turn out to be wrong. This needs the same
+listener setup as client-mode pairing, plus a **separate** per-user token:
+
+```json
+"remote_rules": {
+  "token_ref": "vault:secrets/msggw#jfgratton_rules_token"
+}
+```
+
+This is deliberately not the same `token_ref` as `remote_pairing`: re-pairing
+a phone and editing one's own routing rules are different-blast-radius
+capabilities, independently grantable and revocable. Leaving `token_ref`
+unset, or empty, disables remote rules management for that user, the same
+way an unset `remote_pairing.token_ref` disables remote pairing.
+
+See [RUNNING.md § Remote rules management](RUNNING.md#remote-rules-management--client-mode)
+for the full `msg-gw rules pull`/`push --remote` walkthrough. In short:
+`pull` fetches the current `default_direct`/`default_group`/`rules` as
+JSON (context plus what you edit), `push` replaces `rules` wholesale after
+validating it — the same checks `msg-gw config check` applies — and blocks
+until the daemon confirms the change is actually live, not merely saved,
+since pushing a valid rules list can still fail to take effect if something
+transient (Mattermost briefly unreachable, say) prevents the daemon from
+switching over; the daemon reverts to its previous, working configuration
+in that case rather than staying down.
 
 ### `routing`
 

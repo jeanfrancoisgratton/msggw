@@ -29,6 +29,7 @@ the other: set up the daemon, then pair yourself as its one user.
 - [Setting up a client (user)](#setting-up-a-client-user)
   - [Local pairing — you have shell access to the daemon's host](#local-pairing--you-have-shell-access-to-the-daemons-host)
   - [Remote pairing — client mode](#remote-pairing--client-mode)
+  - [Remote rules management — client mode](#remote-rules-management--client-mode)
   - [Checking your own status](#checking-your-own-status)
   - [Unpairing](#unpairing)
   - [Fallback: manual cookies (headless / no-browser environments)](#fallback-manual-cookies-headless--no-browser-environments)
@@ -131,7 +132,10 @@ and rules.
 If any of your users will pair remotely instead of on this host (see
 [Remote pairing](#remote-pairing--client-mode) below), this is also where you
 enable the [`listener`](CONFIGURATION.md#listener) and set that user's
-`remote_pairing.token_ref`.
+`remote_pairing.token_ref`. The same applies if a user should be able to
+manage their own routing rules remotely (see [Remote rules
+management](#remote-rules-management--client-mode) below) — set their
+`remote_rules.token_ref` too, a separate token from `remote_pairing`'s.
 
 Hand-writing the entry above is not the only way to get there: `message-gateway
 pair NAME --mattermost-user USERNAME` creates it for you the first time NAME
@@ -282,11 +286,15 @@ What a reload does, precisely:
   wouldn't load. A reload can never leave the daemon half-configured or
   down because of a typo.
 - Once a new configuration is confirmed valid, restarts every user's Google
-  Messages bridge, the shared Mattermost connection, and the pairing
-  listener (if enabled) against it — all inside the same process, same PID,
-  same container. Every currently-connected user briefly drops and
-  reconnects; a user's Google Messages session itself is untouched (no
-  re-pairing), same as a full restart.
+  Messages bridge and the shared Mattermost connection against it — all
+  inside the same process, same PID, same container. Every
+  currently-connected user briefly drops and reconnects; a user's Google
+  Messages session itself is untouched (no re-pairing), same as a full
+  restart. The listener (remote pairing, remote rules management) is *not*
+  restarted as part of this — it runs for the whole lifetime of the daemon
+  process, not per reload, so it keeps serving throughout and a client never
+  sees it drop. It only rebinds, briefly, if `listener.port`/`cert_file`/
+  `key_file` themselves changed.
 - Does **not** retroactively move a conversation already bridged under an
   old rule — same caveat as [rules](#5-add-edit-and-remove-routing-rules)
   above: a rule is only consulted the first time a conversation is bridged.
@@ -303,14 +311,22 @@ under the `state_dir` the daemon *started* with — so a reload that changes
 just restart normally instead.
 
 If the new configuration is valid but the daemon can't actually connect with
-it (Mattermost unreachable, the listener's port already taken, and similar)
-the reload fails past the validation step and the daemon exits — the same
-fate a cold start would have hit with that configuration — for your process
-supervisor (or container runtime) to restart it. That's a narrower failure
-mode than it sounds: content problems (a bad regex, a malformed destination)
-are always caught before anything is torn down; only genuine
-connectivity/environment problems can still bring the daemon down, and only
-after a reload was already requested with a config to blame in the logs.
+it (Mattermost briefly unreachable, and similar), the daemon does **not**
+exit: it reverts to the configuration it had running before the reload was
+requested, and logs that it did so. Content problems (a bad regex, a
+malformed destination) are always caught before anything is torn down, the
+same as always; this rollback covers the narrower case of a configuration
+that is valid on paper but hits a genuine connectivity/environment problem
+the moment the daemon tries to actually run it. This matters more than it
+might otherwise, now that a user's own [`msg-gw rules push`](#remote-rules-management--client-mode)
+can trigger a reload on demand, not just an operator running `msg-gw
+reload` deliberately: a harmless rules change landing at the same moment as
+an unrelated, transient Mattermost hiccup must not take the whole daemon
+down for everyone. The one scenario that can still bring the daemon down is
+reverting to the previous configuration *also* failing — at that point
+there is nothing left running to fall back to, and it exits for your process
+supervisor (or container runtime) to restart it, the same fate a cold start
+would have hit.
 
 ---
 
@@ -435,6 +451,78 @@ then reports success back to your `pair --remote` — the same guarantee local
 pairing gives, just over the network instead of a shell on the daemon's host.
 See [SOLUTION.md § Client-mode pairing](SOLUTION.md#client-mode-pairing)
 for the design reasoning.
+
+### Remote rules management — client mode
+
+Once paired, you can manage your own [routing rules](#5-add-edit-and-remove-routing-rules)
+the same way — over the network, with your own token, without asking the
+operator to run `msg-gw rules` on your behalf every time you want to change
+where something goes.
+
+This needs the same two things as remote pairing, set up by the
+**operator**, plus a separate token specifically for this capability:
+
+1. The daemon's [`listener`](CONFIGURATION.md#listener) is enabled.
+2. Your `users[].remote_rules.token_ref` is set, and the operator has handed
+   you the bearer token it resolves to, out of band. This is a *different*
+   token from `remote_pairing.token_ref` on purpose — re-pairing your phone
+   and editing your own routing rules are different-blast-radius
+   capabilities, independently revocable.
+
+First, **pull** your current rules — always start here, not from memory, so
+you edit the daemon's actual current state:
+
+```bash
+message-gateway rules pull jfgratton \
+  --remote https://msggw.example.net:8443 \
+  --token-file ~/.msggw-rules-token \
+  --file rules.json
+```
+
+`rules.json` holds `default_direct`, `default_group` and `rules` (see
+[`routing`](CONFIGURATION.md#routing) for the field reference) — but only
+edit `rules`. `default_direct`/`default_group` are shown for context (so you
+can see where your fallback currently points while you edit) but are
+**read-only**: they are set by the operator, and `push` cannot change them
+no matter what you put in the file. This is deliberate — it's what
+guarantees you keep receiving messages somewhere even if your own rules
+change turns out to be wrong.
+
+Then **push** the edited rules back:
+
+```bash
+message-gateway rules push jfgratton \
+  --remote https://msggw.example.net:8443 \
+  --token-file ~/.msggw-rules-token \
+  --file rules.json
+```
+
+`push` is a **full replacement of `rules`**, and only `rules` — not a merge,
+and not a way to change your fallback: whatever rules the daemon currently
+has for you are discarded in favor of `rules.json`'s `rules` array, which is
+why pulling first matters. Nothing else about your configuration is touched
+by pushing it: `default_direct`/`default_group` and every operator-level
+setting (thread layout, delivery-status reactions, and so on) stay exactly
+whatever the operator set them to. The rules are validated twice: once
+locally, with the same checks the daemon applies, so an obvious mistake (a
+bad regex, a malformed destination) is caught before the round trip; and
+again by the daemon, which only saves them once the result loads cleanly,
+the same guarantee `msg-gw rules add` gives on the daemon's own host.
+
+Unlike `rules add`/`rules remove`, there is no separate "now go run `reload`"
+step: `push` blocks until the daemon has actually reloaded and tells you
+whether the change is live, not just saved. If the daemon has to fall back
+to its previous configuration — because, say, Mattermost was briefly
+unreachable at the exact moment your change tried to take effect — `push`
+still reports this as an error, even though your rules were in fact saved:
+the daemon will pick them up on its next successful reload, but they are not
+live yet, so treating it as anything other than a failure would be
+misleading. Retrying the same push shortly after is the right response.
+
+The token can also be passed with `--token`, or via the `MSGGW_RULES_TOKEN`
+environment variable, instead of `--token-file`. `--insecure-skip-verify`
+skips TLS certificate verification, for testing against a self-signed
+listener only — don't use it against a real deployment.
 
 ### Checking your own status
 

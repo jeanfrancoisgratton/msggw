@@ -37,7 +37,7 @@
 
   "users": [
     {
-      "name": "jfgratton",
+      "name": "CHANGEME",
       "gmessages": {
         "ping_interval_seconds": 60,
         "force_rcs": true,
@@ -45,7 +45,10 @@
         "backfill_count": 0
       },
       "remote_pairing": {
-        "token_ref": "vault:secrets/msggw#jfgratton_pairing_token"
+        "token_ref": "vault:secrets/msggw#CHANGEME_pairing_token"
+      },
+      "remote_rules": {
+        "token_ref": "vault:secrets/msggw#CHANGEME_rules_token"
       },
       "routing": {
         "default_direct": {
@@ -60,29 +63,14 @@
         },
         "rules": [
           {
-            "name": "family goes to my DMs",
+            "name": "example: family goes to my DMs",
             "phones": ["+1 514 555-1212", "+15145551213"],
             "destination": {
               "type": "direct",
-              "user": "jfgratton"
+              "user": "CHANGEME"
             }
           }
         ],
-        "thread_per_conversation": true,
-        "post_delivery_status": true,
-        "join_channels": true
-      }
-    },
-    {
-      "name": "kiddo",
-      "gmessages": {
-        "force_rcs": true
-      },
-      "routing": {
-        "default_direct": {
-          "type": "direct",
-          "user": "kiddo"
-        },
         "thread_per_conversation": true,
         "post_delivery_status": true,
         "join_channels": true

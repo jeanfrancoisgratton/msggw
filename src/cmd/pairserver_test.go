@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"msggw/internal/config"
@@ -22,7 +23,9 @@ func testPairServer() *pairServer {
 			{Name: "notoken"},
 		},
 	}
-	return newPairServer(cfg, slog.New(slog.NewTextHandler(discard{}, nil)))
+	sharedCfg := new(atomic.Pointer[config.Config])
+	sharedCfg.Store(cfg)
+	return newPairServer(sharedCfg, slog.New(slog.NewTextHandler(discard{}, nil)))
 }
 
 type discard struct{}

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,8 +42,13 @@ var (
 // docs/SOLUTION.md): a client running msg-gw on the operator's own
 // device signs into Google there and hands the resulting cookies to this
 // endpoint, instead of a human copying them onto the daemon's host.
+//
+// It runs for the whole process lifetime (see daemon.go,
+// startPersistentListener), outliving any single configuration generation,
+// so it reads cfg through an atomic pointer that daemon.go updates on every
+// successful reload, rather than holding a snapshot that would go stale.
 type pairServer struct {
-	cfg *config.Config
+	cfg *atomic.Pointer[config.Config]
 	log *slog.Logger
 
 	mu      sync.Mutex
@@ -55,7 +61,7 @@ type pendingPairing struct {
 	expires time.Time
 }
 
-func newPairServer(cfg *config.Config, log *slog.Logger) *pairServer {
+func newPairServer(cfg *atomic.Pointer[config.Config], log *slog.Logger) *pairServer {
 	return &pairServer{cfg: cfg, log: log, pending: make(map[string]*pendingPairing)}
 }
 
@@ -96,13 +102,14 @@ func (s *pairServer) sweep(ctx context.Context) {
 }
 
 func (s *pairServer) handleStart(w http.ResponseWriter, r *http.Request) {
+	cfg := s.cfg.Load()
 	name := r.PathValue("name")
-	user, err := findUser(s.cfg, name)
+	user, err := findUser(cfg, name)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	if err := s.authenticate(r, user); err != nil {
+	if err := s.authenticate(r, cfg, user); err != nil {
 		s.denyAuth(w, user, err)
 		return
 	}
@@ -118,7 +125,7 @@ func (s *pairServer) handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gmCfg, err := newGMessagesConfig(user, s.cfg, s.log)
+	gmCfg, err := newGMessagesConfig(user, cfg, s.log)
 	if err != nil {
 		s.log.Error("remote pairing: could not build the gmessages config", "user", name, "error", err)
 		writeError(w, http.StatusInternalServerError, errors.New("internal error"))
@@ -143,13 +150,14 @@ func (s *pairServer) handleStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *pairServer) handleWait(w http.ResponseWriter, r *http.Request) {
+	cfg := s.cfg.Load()
 	name := r.PathValue("name")
-	user, err := findUser(s.cfg, name)
+	user, err := findUser(cfg, name)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	if err := s.authenticate(r, user); err != nil {
+	if err := s.authenticate(r, cfg, user); err != nil {
 		s.denyAuth(w, user, err)
 		return
 	}
@@ -193,16 +201,33 @@ func (s *pairServer) handleWait(w http.ResponseWriter, r *http.Request) {
 // remote_pairing.token_ref. Body parsing never happens before this succeeds,
 // so an unauthenticated caller cannot make the daemon do anything but a
 // cheap string compare.
-func (s *pairServer) authenticate(r *http.Request, user config.UserConfig) error {
-	if user.RemotePairing.TokenRef == "" {
-		return errRemotePairingDisabled
+func (s *pairServer) authenticate(r *http.Request, cfg *config.Config, user config.UserConfig) error {
+	return authenticateBearerToken(r, user.RemotePairing.TokenRef, cfg.Vault, errRemotePairingDisabled)
+}
+
+// denyAuth maps an authenticate error onto the right HTTP status, logging
+// anything unexpected (a broken token_ref) without leaking Vault or file
+// details to the network caller.
+func (s *pairServer) denyAuth(w http.ResponseWriter, user config.UserConfig, err error) {
+	denyAuth(w, s.log, "remote pairing", errRemotePairingDisabled, user, err)
+}
+
+// authenticateBearerToken checks r's Authorization header against tokenRef
+// (resolved through vault) with a timing-safe comparison. It is shared by
+// pairServer and rulesServer, which differ only in which token_ref they
+// check and what "this capability is disabled" error they want back —
+// disabledErr covers both: an empty or unresolved tokenRef means the
+// operator never enabled this capability for this user.
+func authenticateBearerToken(r *http.Request, tokenRef string, vault secrets.VaultConfig, disabledErr error) error {
+	if tokenRef == "" {
+		return disabledErr
 	}
-	want, err := secrets.OpenString(user.RemotePairing.TokenRef, s.cfg.Vault)
+	want, err := secrets.OpenString(tokenRef, vault)
 	if err != nil {
-		return fmt.Errorf("resolving remote_pairing.token_ref: %w", err)
+		return fmt.Errorf("resolving token: %w", err)
 	}
 	if want == "" {
-		return errRemotePairingDisabled
+		return disabledErr
 	}
 
 	const prefix = "Bearer "
@@ -217,17 +242,18 @@ func (s *pairServer) authenticate(r *http.Request, user config.UserConfig) error
 	return nil
 }
 
-// denyAuth maps an authenticate error onto the right HTTP status, logging
-// anything unexpected (a broken token_ref) without leaking Vault or file
-// details to the network caller.
-func (s *pairServer) denyAuth(w http.ResponseWriter, user config.UserConfig, err error) {
+// denyAuth maps an authenticateBearerToken error onto the right HTTP status,
+// logging anything unexpected (a broken token_ref) without leaking Vault or
+// file details to the network caller. action labels the log line (e.g.
+// "remote pairing", "remote rules").
+func denyAuth(w http.ResponseWriter, log *slog.Logger, action string, disabledErr error, user config.UserConfig, err error) {
 	switch {
-	case errors.Is(err, errRemotePairingDisabled):
+	case errors.Is(err, disabledErr):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, errUnauthorized):
 		writeError(w, http.StatusUnauthorized, err)
 	default:
-		s.log.Error("remote pairing: could not check the token", "user", user.Name, "error", err)
+		log.Error(action+": could not check the token", "user", user.Name, "error", err)
 		writeError(w, http.StatusInternalServerError, errors.New("internal error"))
 	}
 }

@@ -489,3 +489,89 @@ func TestUserNameIsRequired(t *testing.T) {
 		t.Errorf("the error does not explain the problem: %v", err)
 	}
 }
+
+// TestRuleValidate covers Rule.Validate in isolation — it must be usable
+// without the rest of config.json, since a rules-management client (see
+// rulesclient) validates a submitted rule the same way the daemon does,
+// before ever sending it over the network.
+func TestRuleValidate(t *testing.T) {
+	tests := []struct {
+		name string
+		rule Rule
+		ok   bool
+	}{
+		{"valid, matches on phone", Rule{Phones: []string{"+1"}, Destination: Destination{Type: DestDirect, User: "jf"}}, true},
+		{"no criteria", Rule{Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"both shape filters", Rule{Phones: []string{"+1"}, GroupsOnly: true, DirectsOnly: true, Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"bad regex", Rule{NamePattern: "(", Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"invalid destination", Rule{Phones: []string{"+1"}, Destination: Destination{Type: DestDirect}}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.rule.Validate()
+			if tc.ok && err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+			if !tc.ok && err == nil {
+				t.Error("Validate() = nil, want an error")
+			}
+		})
+	}
+}
+
+// TestValidateRules covers the factored-out per-user check that both
+// Config.Validate and a rules-management client call — see
+// rulesserver.go's handlePut, which validates a pushed document with this
+// exact function before ever touching config.json.
+func TestValidateRules(t *testing.T) {
+	direct := Destination{Type: DestDirect, User: "jf"}
+
+	if err := ValidateRules(direct, Destination{}, nil); err != nil {
+		t.Errorf("a valid default_direct with no rules and no default_group was rejected: %v", err)
+	}
+
+	if err := ValidateRules(Destination{}, Destination{}, nil); err == nil {
+		t.Error("an empty (invalid) default_direct was accepted")
+	}
+
+	if err := ValidateRules(direct, Destination{Type: DestChannel, Channel: "missing-team"}, nil); err == nil {
+		t.Error("an invalid default_group was accepted even though default_direct alone is valid")
+	}
+
+	rules := []Rule{{Phones: []string{"+1"}, Destination: direct}}
+	if err := ValidateRules(direct, Destination{}, rules); err != nil {
+		t.Errorf("a valid rule was rejected: %v", err)
+	}
+
+	badRules := []Rule{{Name: "oops", Destination: direct}}
+	err := ValidateRules(direct, Destination{}, badRules)
+	if err == nil {
+		t.Fatal("a rule with no criteria was accepted")
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("the error does not name the offending rule: %v", err)
+	}
+}
+
+// TestValidateRuleList covers the narrower, defaults-free check a rules-only
+// push validates against (see rulesserver.go's handlePut and
+// rulesproto.RulesUpdate) — it must say nothing about default_direct/
+// default_group, since a rules-only push cannot change them at all.
+func TestValidateRuleList(t *testing.T) {
+	if err := ValidateRuleList(nil); err != nil {
+		t.Errorf("an empty rule list was rejected: %v", err)
+	}
+
+	direct := Destination{Type: DestDirect, User: "jf"}
+	if err := ValidateRuleList([]Rule{{Phones: []string{"+1"}, Destination: direct}}); err != nil {
+		t.Errorf("a valid rule was rejected: %v", err)
+	}
+
+	err := ValidateRuleList([]Rule{{Name: "oops", Destination: direct}})
+	if err == nil {
+		t.Fatal("a rule with no criteria was accepted")
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("the error does not name the offending rule: %v", err)
+	}
+}

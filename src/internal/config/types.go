@@ -76,6 +76,7 @@ type UserConfig struct {
 	GMessages     GMessagesConfig     `json:"gmessages"`
 	Routing       RoutingConfig       `json:"routing"`
 	RemotePairing RemotePairingConfig `json:"remote_pairing,omitempty"`
+	RemoteRules   RemoteRulesConfig   `json:"remote_rules,omitempty"`
 }
 
 // RemotePairingConfig enables "client mode" pairing for this tenant (see
@@ -93,6 +94,22 @@ type RemotePairingConfig struct {
 	// its Authorization header. Unlike the Google Messages session, which
 	// libgm rewrites roughly hourly, this is never written back, so any
 	// secret scheme (including literal: and env:) is fine here.
+	TokenRef string `json:"token_ref,omitempty"`
+}
+
+// RemoteRulesConfig enables self-service routing-rule management for this
+// tenant: a client running the msg-gw binary authenticates with TokenRef
+// and, through the listener's HTTP(S) endpoint, fetches and replaces its own
+// routing.default_direct, routing.default_group and routing.rules — without
+// operator or host access. It is deliberately a separate token from
+// RemotePairing: re-pairing a phone and editing one's own routing rules are
+// different-blast-radius capabilities, independently revocable.
+//
+// Empty TokenRef disables remote rules management for this user, the same
+// way RemotePairing.TokenRef being empty disables remote pairing.
+type RemoteRulesConfig struct {
+	// TokenRef resolves to the bearer token a remote client must present in
+	// its Authorization header.
 	TokenRef string `json:"token_ref,omitempty"`
 }
 

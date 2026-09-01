@@ -5,14 +5,22 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"msggw/internal/config"
+	"msggw/internal/rulesclient"
+	"msggw/internal/rulesproto"
 )
 
 var rulesCmd = &cobra.Command{
@@ -283,6 +291,165 @@ func destinationFromFlags(channel, channelID, user string, users []string) (conf
 	default:
 		return config.Destination{Type: config.DestGroup, Users: users}, nil
 	}
+}
+
+var (
+	rulesRemote             string
+	rulesToken              string
+	rulesTokenFile          string
+	rulesInsecureSkipVerify bool
+	rulesFile               string
+)
+
+var rulesPullCmd = &cobra.Command{
+	Use:   "pull NAME",
+	Short: "Fetch a user's routing rules from a remote daemon",
+	Long: `Fetch the routing rules for the user named NAME from a daemon over the
+network — see docs/RUNNING.md, "Remote rules management" — and print them as
+JSON, so they can be edited and pushed back with "msg-gw rules push".
+
+This is "client mode": nothing here reads or writes local config.json.
+--remote needs a bearer token for that user, set on the daemon side under
+that user's remote_rules.token_ref; pass it here with --token, --token-file,
+or the MSGGW_RULES_TOKEN environment variable.`,
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		token, err := resolveRulesToken()
+		if err != nil {
+			return err
+		}
+		client := rulesclient.New(rulesRemote, token, rulesInsecureSkipVerify)
+
+		getCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		doc, err := client.Get(getCtx, args[0])
+		if err != nil {
+			return fmt.Errorf("fetching rules for %s: %w", args[0], err)
+		}
+
+		data, err := json.MarshalIndent(doc, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encoding rules: %w", err)
+		}
+		data = append(data, '\n')
+
+		if rulesFile == "" {
+			_, err = cmd.OutOrStdout().Write(data)
+			return err
+		}
+		if err := os.WriteFile(rulesFile, data, 0o600); err != nil {
+			return fmt.Errorf("writing --file: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s's current routing rules to %s.\n", args[0], rulesFile)
+		return nil
+	},
+}
+
+var rulesPushCmd = &cobra.Command{
+	Use:   "push NAME",
+	Short: "Replace a user's routing rules on a remote daemon",
+	Long: `Replace the routing rules for the user named NAME on a daemon over the
+network — see docs/RUNNING.md, "Remote rules management" — with the rules
+read from --file (as produced by "msg-gw rules pull"). This is a full
+replacement of routing.rules, and only routing.rules: whatever rules the
+daemon currently has for NAME are discarded in favor of --file's, which is
+why "pull" before "push" matters — recreate rules from the daemon's own
+output, not from memory.
+
+default_direct and default_group are not affected by this command at all,
+even though --file (as "pull" writes it) includes them for context: they
+are operator-set, so the fallback destination that guarantees message
+delivery when nothing in "rules" matches can never be changed by a push.
+
+The rules are validated locally first, with the same checks the daemon
+itself applies, so an obvious mistake is caught before the round trip. The
+daemon then validates them again, saves them, and reloads before
+responding, so this command's result is an honest pass/fail: config.json
+(on the daemon's host) was written to. When the daemon has to revert to its
+previous configuration, on reload failure, the rules are still saved — they
+will take effect on the next successful reload — but this is reported as an
+error regardless, since they are not live yet.
+
+--remote needs a bearer token for that user, set on the daemon side under
+that user's remote_rules.token_ref; pass it here with --token, --token-file,
+or the MSGGW_RULES_TOKEN environment variable.`,
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		if rulesFile == "" {
+			return errors.New("--file is required: the rules to push (see \"msg-gw rules pull\")")
+		}
+		data, err := os.ReadFile(rulesFile)
+		if err != nil {
+			return fmt.Errorf("reading --file: %w", err)
+		}
+		var doc rulesproto.RulesDocument
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("parsing --file as JSON: %w", err)
+		}
+		if err := config.ValidateRuleList(doc.Rules); err != nil {
+			return fmt.Errorf("%s is not valid: %w", rulesFile, err)
+		}
+
+		token, err := resolveRulesToken()
+		if err != nil {
+			return err
+		}
+		client := rulesclient.New(rulesRemote, token, rulesInsecureSkipVerify)
+
+		result, err := client.Put(ctx, args[0], doc.Rules)
+		if err != nil {
+			return fmt.Errorf("pushing rules for %s: %w", args[0], err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Pushed and applied %d rule(s) for %s.\n", len(result.Rules), args[0])
+		return nil
+	},
+}
+
+// resolveRulesToken finds the bearer token for --remote, in the order the
+// command's help text documents: the flag, then a file, then the
+// environment — the same precedence resolvePairToken uses.
+func resolveRulesToken() (string, error) {
+	if rulesToken != "" {
+		return rulesToken, nil
+	}
+	if rulesTokenFile != "" {
+		data, err := os.ReadFile(rulesTokenFile)
+		if err != nil {
+			return "", fmt.Errorf("reading --token-file: %w", err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	if token := os.Getenv("MSGGW_RULES_TOKEN"); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("--remote needs a token: pass --token, --token-file, or set MSGGW_RULES_TOKEN")
+}
+
+func addRulesRemoteFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&rulesRemote, "remote", "", "the daemon to talk to over the network (e.g. https://msggw.example.net:8443) — required")
+	cmd.Flags().StringVar(&rulesToken, "token", "", "bearer token for --remote (or use --token-file / MSGGW_RULES_TOKEN)")
+	cmd.Flags().StringVar(&rulesTokenFile, "token-file", "", "file containing the bearer token for --remote")
+	cmd.Flags().BoolVar(&rulesInsecureSkipVerify, "insecure-skip-verify", false, "skip TLS certificate verification for --remote (testing only)")
+	_ = cmd.MarkFlagRequired("remote")
+}
+
+func init() {
+	addRulesRemoteFlags(rulesPullCmd)
+	rulesPullCmd.Flags().StringVar(&rulesFile, "file", "", "write the fetched document here instead of stdout")
+
+	addRulesRemoteFlags(rulesPushCmd)
+	rulesPushCmd.Flags().StringVar(&rulesFile, "file", "", "the document to push, as produced by \"rules pull\" (required)")
+
+	rulesCmd.AddCommand(rulesPullCmd, rulesPushCmd)
 }
 
 func init() {

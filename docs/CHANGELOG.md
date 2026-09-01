@@ -1,5 +1,6 @@
 | Release | Date        | Comments                                                                                                                                         |
 |---------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0.9.0   | 2026.09.01  | Self-service routing rules (`msg-gw rules pull/push --remote`); persistent listener survives reloads; automatic rollback on a failed reload; near-prod version bump. |
 | 0.7.1   | 2026.08.30  | Completed pairing, windows build dry run                                                                                                         |
 | 0.6.0   | 2026.08.23  | Replaced QR-code pairing with Google-account (Gaia) cookie + emoji pairing; Google retired the QR device-pairing endpoint this bridge relied on. |
 | 0.5.0   | 2026.08.22  | Storage back-ends are now multi-tenants aware, just in case I wish to go down that road                                                          |
