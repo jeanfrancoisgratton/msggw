@@ -3,7 +3,7 @@
 
 pkgname=msggw
 pkgver=0.9.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Messages <-> Mattermost bridge"
 arch=('x86_64')
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
