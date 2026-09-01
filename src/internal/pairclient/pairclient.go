@@ -2,7 +2,7 @@
 // Written by J.F. Gratton <jean-francois@famillegratton.net>
 
 // Package pairclient is the client side of "client mode" pairing (see
-// docs/MULTI-TENANCY.md): it lets "msg-gw pair NAME --remote ..." run
+// docs/SOLUTION.md): it lets "msg-gw pair NAME --remote ..." run
 // entirely on the operator's own device — signing into Google there — and
 // hand the resulting cookies to a daemon over the network, rather than a
 // human copying them onto the daemon's host by hand.

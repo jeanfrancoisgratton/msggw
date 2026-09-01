@@ -38,7 +38,7 @@ var (
 )
 
 // pairServer serves the daemon side of "client mode" pairing (see
-// docs/MULTI-TENANCY.md): a client running msg-gw on the operator's own
+// docs/SOLUTION.md): a client running msg-gw on the operator's own
 // device signs into Google there and hands the resulting cookies to this
 // endpoint, instead of a human copying them onto the daemon's host.
 type pairServer struct {

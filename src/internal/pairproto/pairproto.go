@@ -4,7 +4,7 @@
 // Package pairproto is the wire format shared between the daemon's
 // remote-pairing HTTP endpoint (wired up in cmd/pairserver.go) and msg-gw's
 // own "pair --remote" client (internal/pairclient) — see
-// docs/MULTI-TENANCY.md, "client mode".
+// docs/SOLUTION.md, "client mode".
 package pairproto
 
 // StartResponse answers POST /pair/{name}/start. The request body is the

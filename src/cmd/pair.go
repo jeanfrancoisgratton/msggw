@@ -65,7 +65,7 @@ Reach it with --cookies-file, by piping that JSON to stdin, or with
 non-interactive). See docs/RUNNING.md, "Fallback: manual cookies", for the
 full walkthrough.
 
-With --remote, this runs in "client mode" (see docs/MULTI-TENANCY.md): the
+With --remote, this runs in "client mode" (see docs/SOLUTION.md): the
 cookies never leave the machine this command runs on except over the network
 to the daemon named by --remote. This is what a client's own copy of msg-gw
 uses to pair without ever touching the daemon's configuration, and without the
@@ -131,7 +131,7 @@ variable.`,
 
 // runRemotePairing drives the same pairing flow as the local branch above,
 // but against a daemon's remote-pairing HTTP endpoint instead of a local
-// gmessages.Pairing — see docs/MULTI-TENANCY.md, "client mode".
+// gmessages.Pairing — see docs/SOLUTION.md, "client mode".
 func runRemotePairing(ctx context.Context, out io.Writer, name string, cookies map[string]string) error {
 	token, err := resolvePairToken()
 	if err != nil {
@@ -273,7 +273,7 @@ func init() {
 	pairCmd.Flags().BoolVar(&pairNoBrowser, "no-browser", false,
 		"fallback: skip the automated browser sign-in and read cookies JSON from stdin instead")
 	pairCmd.Flags().StringVar(&pairRemote, "remote", "",
-		"pair against a daemon over the network (e.g. https://msggw.example.net:8443) instead of locally — client mode, see docs/MULTI-TENANCY.md")
+		"pair against a daemon over the network (e.g. https://msggw.example.net:8443) instead of locally — client mode, see docs/SOLUTION.md")
 	pairCmd.Flags().StringVar(&pairToken, "token", "",
 		"bearer token for --remote (or use --token-file / MSGGW_PAIR_TOKEN)")
 	pairCmd.Flags().StringVar(&pairTokenFile, "token-file", "",

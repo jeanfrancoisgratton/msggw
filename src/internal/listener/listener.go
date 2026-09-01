@@ -5,7 +5,7 @@
 
 // Package listener runs the daemon's HTTP(S) listener.
 //
-// It exists for "client mode" pairing (see docs/MULTI-TENANCY.md): a client
+// It exists for "client mode" pairing (see docs/SOLUTION.md): a client
 // running on the operator's own device, not this host, registers pairing
 // material with the daemon instead of that material ever touching this
 // host's own network fingerprint at Google's login page. This package only
@@ -148,7 +148,7 @@ func (w errorLogWriter) Write(p []byte) (int, error) {
 
 // DefaultHandler is the listener's base handler: a health check, plus
 // whatever else the caller mounts onto the returned mux (client-mode
-// pairing's routes — see cmd/pairserver.go and docs/MULTI-TENANCY.md).
+// pairing's routes — see cmd/pairserver.go and docs/SOLUTION.md).
 func DefaultHandler() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

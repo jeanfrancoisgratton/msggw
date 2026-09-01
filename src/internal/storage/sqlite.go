@@ -59,12 +59,12 @@ func Open(ctx context.Context, path string) (*DB, error) {
 // version i to version i+1. They are never edited once released, only
 // appended to — this codebase has not shipped yet, so migration 0 below still
 // carries the tenant column directly rather than through a later ALTER TABLE;
-// see docs/MULTI-TENANCY.md.
+// see docs/SOLUTION.md.
 var sqliteMigrations = []string{
 	`
 CREATE TABLE conversations (
     -- Unused today: always ''. Exists so that multi-tenancy (several paired
-    -- phones in one daemon, see docs/MULTI-TENANCY.md) needs no migration if
+    -- phones in one daemon, see docs/SOLUTION.md) needs no migration if
     -- it is ever implemented — only the query layer would need to start
     -- passing something other than the default.
     tenant                     TEXT NOT NULL DEFAULT '',
@@ -109,7 +109,7 @@ CREATE TABLE conversation_participants (
 );
 
 -- Leads with tenant: this is the sharpest cross-tenant edge there is (see
--- docs/MULTI-TENANCY.md) — two tenants can share a contact's phone number,
+-- docs/SOLUTION.md) — two tenants can share a contact's phone number,
 -- and FindConversationByPhone must never let one see the other's thread.
 CREATE INDEX participants_by_phone ON conversation_participants(tenant, normalized_phone);
 

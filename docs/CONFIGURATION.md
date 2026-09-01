@@ -261,7 +261,8 @@ every user in [`users`](#users) — not one per tenant.
 This listener serves client-mode pairing (a client running on the operator's
 own device registers pairing material with the daemon, so the device doing
 the actual Google sign-in is never the daemon's own host — see
-[Client-mode pairing](#client-mode-pairing) and `docs/MULTI-TENANCY.md`) at
+[Client-mode pairing](#client-mode-pairing) and
+[docs/SOLUTION.md § Client-mode pairing](SOLUTION.md#client-mode-pairing)) at
 `/pair/{name}/start` and `/pair/{name}/wait`, plus a `/healthz` check. Both
 `/pair` routes require a per-user bearer token
 (`users[].remote_pairing.token_ref`); a user with no token configured gets a

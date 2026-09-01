@@ -55,7 +55,7 @@ type Config struct {
 	Mattermost MattermostConfig    `json:"mattermost"`
 	Listener   ListenerConfig      `json:"listener,omitempty"`
 
-	// Users is one entry per paired phone — see docs/MULTI-TENANCY.md. There
+	// Users is one entry per paired phone — see docs/SOLUTION.md. There
 	// is always at least one: a single-user deployment is just a Users slice
 	// of length one, not a separate shape.
 	Users []UserConfig `json:"users"`
@@ -79,7 +79,7 @@ type UserConfig struct {
 }
 
 // RemotePairingConfig enables "client mode" pairing for this tenant (see
-// docs/MULTI-TENANCY.md): a client running the msg-gw binary on the
+// docs/SOLUTION.md): a client running the msg-gw binary on the
 // operator's own device — not this daemon's host — authenticates with
 // TokenRef and hands over pairing cookies through the listener's HTTP(S)
 // endpoint, instead of a human copying a cookies.json onto the daemon.
@@ -214,7 +214,7 @@ func (r RoutingConfig) ThreadPerConversationEnabled() bool {
 // ListenerConfig configures the daemon's HTTP(S) listener. It exists for
 // "client mode" pairing: a client running on the operator's own device (not
 // this host) registers pairing material without ever sending it to the
-// daemon's host over an unencrypted channel — see docs/MULTI-TENANCY.md.
+// daemon's host over an unencrypted channel — see docs/SOLUTION.md.
 //
 // The listener is disabled unless Port is set; there is no separate "enabled"
 // flag, the same way GMessagesConfig.BackfillCount uses 0 to mean off.

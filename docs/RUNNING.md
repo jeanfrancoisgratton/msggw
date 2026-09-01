@@ -52,9 +52,8 @@ go test ./...             # optional, but cheap insurance
 Packaging stubs for Debian, RPM-based distros, Arch and Alpine live under
 `__debian/`, `__redhat/`, `__archlinux/` and `__alpine/` at the repository
 root, each with its own `Makefile`, if you'd rather build a distro package
-than run `build.sh` by hand. There is no systemd unit shipped yet (see
-[docs/ROADMAP.md](ROADMAP.md)) — [Keep it running](#6-keep-it-running) below
-has a minimal one to adapt.
+than run `build.sh` by hand. There is no systemd unit shipped yet —
+[Keep it running](#6-keep-it-running) below has a minimal one to adapt.
 
 ### 2. Create the Mattermost bot account
 
@@ -285,7 +284,7 @@ phone, then a wait for confirmation. Behind the scenes, the daemon relays the
 emoji, waits for the phone, verifies the session by reconnecting, and only
 then reports success back to your `pair --remote` — the same guarantee local
 pairing gives, just over the network instead of a shell on the daemon's host.
-See [MULTI-TENANCY.md § Client-mode pairing](MULTI-TENANCY.md#client-mode-pairing-a-second-piece-of-groundwork)
+See [SOLUTION.md § Client-mode pairing](SOLUTION.md#client-mode-pairing)
 for the design reasoning.
 
 ### Checking your own status

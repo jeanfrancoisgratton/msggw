@@ -348,7 +348,7 @@ func TestMeta(t *testing.T) {
 	}
 }
 
-// TestTenantIsolation covers docs/MULTI-TENANCY.md's sharpest cross-tenant
+// TestTenantIsolation covers docs/SOLUTION.md's sharpest cross-tenant
 // edge: two tenants whose contacts share a phone number, or who route into
 // the same Mattermost channel, must never see each other's conversations.
 func TestTenantIsolation(t *testing.T) {

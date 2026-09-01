@@ -137,7 +137,7 @@ func (db *DB) GetConversationByRootPost(ctx context.Context, tenant, postID stri
 // Refusing to answer when the channel holds several conversations is
 // deliberate: guessing which one a reply meant would send it to the wrong
 // person. Scoping the count by tenant matters as soon as two tenants can
-// share a destination channel — see docs/MULTI-TENANCY.md.
+// share a destination channel — see docs/SOLUTION.md.
 func (db *DB) GetSoleConversationInChannel(ctx context.Context, tenant, channelID string) (Conversation, error) {
 	var count int
 	if err := db.queryRowContext(ctx,
@@ -158,7 +158,7 @@ func (db *DB) GetSoleConversationInChannel(ctx context.Context, tenant, channelI
 // This is scoped to tenant without exception: gmessages_conversation_id and
 // phone numbers are both Google-account-scoped, and nothing stops two
 // different tenants' contacts from sharing a number — see
-// docs/MULTI-TENANCY.md.
+// docs/SOLUTION.md.
 func (db *DB) FindConversationByPhone(ctx context.Context, tenant, phone string) (Conversation, error) {
 	normalized := NormalizePhone(phone)
 	if normalized == "" {
