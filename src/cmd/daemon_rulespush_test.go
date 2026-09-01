@@ -74,8 +74,11 @@ func rulesPut(t *testing.T, baseURL, name, token string, update rulesproto.Rules
 // newFlakyMattermostServer answers GetMe like fakeMattermostServer, except
 // its failOnCall'th request (1-indexed) fails with 503 — used to simulate a
 // transient Mattermost outage landing on exactly one generation's connect
-// attempt while its neighbors succeed.
-func newFlakyMattermostServer(t *testing.T, failOnCall int32) *httptest.Server {
+// attempt while its neighbors succeed. The returned counter lets a caller
+// wait for a specific call to have landed before moving on (see
+// waitForCallCount) instead of assuming it already has by the time some
+// unrelated signal — the pid file, the listener — is observed.
+func newFlakyMattermostServer(t *testing.T, failOnCall int32) (*httptest.Server, *int32) {
 	t.Helper()
 	var calls int32
 	mux := http.NewServeMux()
@@ -89,7 +92,24 @@ func newFlakyMattermostServer(t *testing.T, failOnCall int32) *httptest.Server {
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &calls
+}
+
+// waitForCallCount blocks until *calls reaches at least want, or fails the
+// test after timeout. Used to synchronize on the daemon's initial generation
+// having actually reached Mattermost — the pid file and the listener both
+// come up before that generation is even started, so neither is proof it has
+// connected yet.
+func waitForCallCount(t *testing.T, calls *int32, want int32, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(calls) >= want {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("mattermost call count did not reach %d within %s (got %d)", want, timeout, atomic.LoadInt32(calls))
 }
 
 // TestDaemonRulesPushAppliesAndReloads drives a real daemon (real listener,
@@ -169,7 +189,7 @@ func TestDaemonRulesPushRollsBackOnTransientFailure(t *testing.T) {
 	// Call 1: initial startup's Connect — succeeds.
 	// Call 2: the pushed reload's new-generation Connect — fails.
 	// Call 3: the rollback generation's Connect — succeeds again.
-	mm := newFlakyMattermostServer(t, 2)
+	mm, mmCalls := newFlakyMattermostServer(t, 2)
 	port := freeTCPPort(t)
 	cfgPath := writeRulesPushTestConfig(t, mm.URL, port)
 
@@ -185,6 +205,13 @@ func TestDaemonRulesPushRollsBackOnTransientFailure(t *testing.T) {
 	pidPath := filepath.Join(filepath.Dir(cfgPath), "msggw.pid")
 	waitForFile(t, pidPath, 5*time.Second)
 	waitForListener(t, port, 5*time.Second)
+
+	// The pid file and the listener both come up before the initial
+	// generation is even started (see daemon.go), so neither proves it has
+	// reached Mattermost yet. Without this, the push below can race
+	// generation 1's own Connect for who lands on the flaky server's call 2,
+	// making the test flaky rather than the daemon.
+	waitForCallCount(t, mmCalls, 1, 5*time.Second)
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
 	update := rulesproto.RulesUpdate{
