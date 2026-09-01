@@ -513,6 +513,26 @@ A rule is applied when a conversation is **first** bridged. Changing the rules
 later does not move existing threads — that would strand their history — so it
 only affects conversations bridged after the change.
 
+**`msg-gw rules`** adds, removes and lists a user's rules without
+hand-editing this file:
+
+```bash
+msg-gw rules list jfgratton
+msg-gw rules add jfgratton --name family \
+  --phone "+1 514 555-1212" --phone "+1 514 555-1213" \
+  --to-user jfgratton
+msg-gw rules remove jfgratton 1
+```
+
+The change is validated the same way `msg-gw config check` validates this
+file, and is written to disk only once the result loads cleanly. It edits
+`config.json` directly, in place — there is no live-reload yet, so the
+running daemon needs a restart to pick up the change. See `msg-gw rules
+--help` for the full flag reference (`--to-channel`, `--to-channel-id`,
+`--to-user`, `--to-users` for destinations; `--conversation-id`,
+`--name-pattern`, `--groups-only`, `--directs-only` alongside `--phone` for
+criteria).
+
 #### Threads
 
 With `thread_per_conversation: true` (the default), each Google Messages

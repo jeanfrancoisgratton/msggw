@@ -95,7 +95,12 @@ func Mutate(path string, fn func(*Config) error) (*Config, error) {
 	// daemon startup failure discovered on the next restart.
 	validated, err := Load(tmpPath)
 	if err != nil {
-		return nil, fmt.Errorf("this change would leave the configuration invalid: %w", err)
+		// Load's error names tmpPath, a file the caller never gave it and
+		// which is gone (removed by the defer above) by the time this
+		// returns — reported as path instead, which is what the caller
+		// actually knows about.
+		return nil, fmt.Errorf("this change would leave the configuration invalid: %s",
+			strings.ReplaceAll(err.Error(), tmpPath, path))
 	}
 
 	current, err := os.ReadFile(path)
