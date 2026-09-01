@@ -114,7 +114,7 @@ reverse-engineered protocol rather than a stable, officially supported one.
 
 ## 3. Architecture overview
 
-`message-gateway` is one program with two live network connections open at
+`msg-gw` is one program with two live network connections open at
 the same time: one to an Android phone (through Google's own Google Messages
 protocol, via `libgm`), one to a Mattermost server (as a bot account, over
 REST + WebSocket). It sits in a loop reading whatever arrives on either
@@ -127,7 +127,7 @@ this Mattermost thread" mappings.
 
 ```text
                      ┌───────────────────┐
-  Android phone  ⇄   │  message-gateway  │   ⇄  Mattermost server
+  Android phone  ⇄   │  msg-gw  │   ⇄  Mattermost server
   (Google Messages)  │  daemon           │      (as a bot account)
                      │  + a database     │
                      │  of mappings      │
@@ -555,7 +555,7 @@ understand the program.
 
 Now that you've seen what runs in steady state, here's how it gets there.
 `src/main.go` is nine lines and just calls `cmd.Execute()`, which is
-[Cobra](https://github.com/spf13/cobra)'s entry point — `message-gateway` is a
+[Cobra](https://github.com/spf13/cobra)'s entry point — `msg-gw` is a
 standard "one root command, several subcommands" CLI (`config`, `pair`, `daemon`,
 `status`, `logout`). Every subcommand shares one flag, `--config`
 (`cmd/root.go:51`), and is registered in `init()` (`root.go:47`) — Go runs
@@ -655,7 +655,7 @@ that's the whole job, stated explicitly in the package doc comment
 > proves that the configuration is internally coherent. Credentials are
 > resolved, and therefore fail, at the point they are used.
 
-That separation is what makes `message-gateway config check` a meaningful *offline*
+That separation is what makes `msg-gw config check` a meaningful *offline*
 command — it can tell you your JSON is well-formed and your routing rules make
 sense without ever touching the network. Whether your Mattermost token
 actually works is a separate concern, checked separately. See
@@ -1134,7 +1134,7 @@ have to re-pair with fresh cookies. It gets rewritten on every auth-token refres
 (roughly hourly while the daemon runs — section 4's step 1 callback), on
 pairing, and on clean shutdown (section 5's defer chain).
 
-One easy-to-miss detail: `message-gateway logout --local-only` says the session "has
+One easy-to-miss detail: `msg-gw logout --local-only` says the session "has
 been deleted," but under the hood `SessionStore.Clear` calls `store.Save(nil)`
 — it truncates the file to zero bytes rather than removing it from disk. The
 *behaviour* is correct (an empty file reads back as "not paired," the same as a

@@ -16,7 +16,7 @@ optdepends=()
 
 options=('!debug')
 
-_binaryname='message-gateway'
+_binaryname='msg-gw'
 _builddir="${pkgname}-${pkgver}"
 
 prepare() {

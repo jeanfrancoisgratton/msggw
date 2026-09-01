@@ -1,6 +1,6 @@
 # Running msggw
 
-There are two different hats worn around a `message-gateway` deployment, and
+There are two different hats worn around a `msg-gw` deployment, and
 this document has one section for each:
 
 - **The operator**, who builds and runs the daemon, owns the configuration
@@ -48,7 +48,7 @@ libc to match at deploy time):
 
 ```bash
 cd src
-./build.sh /opt/sbin      # builds /opt/sbin/message-gateway
+./build.sh /opt/sbin      # builds /opt/sbin/msg-gw
 go test ./...             # optional, but cheap insurance
 ```
 
@@ -66,7 +66,7 @@ upload files, or edit posts (see [SOLUTION.md](SOLUTION.md)).
 
 In Mattermost: **System Console → Integrations → Bot Accounts → Add Bot
 Account**, then create a personal access token for it. Keep that token
-somewhere `message-gateway` can read it as a [secret
+somewhere `msg-gw` can read it as a [secret
 reference](CONFIGURATION.md#secret-references) — a plain file, an environment
 variable, or Vault.
 
@@ -77,11 +77,11 @@ itself.
 
 ### 3. Write the configuration
 
-`message-gateway` reads one JSON file, looked up at `--config`/`-c`, then
+`msg-gw` reads one JSON file, looked up at `--config`/`-c`, then
 `/etc/msggw/config.json`, then `$XDG_CONFIG_HOME/msggw/config.json`:
 
 ```bash
-message-gateway config sample > /etc/msggw/config.json
+msg-gw config sample > /etc/msggw/config.json
 $EDITOR /etc/msggw/config.json
 ```
 
@@ -120,7 +120,7 @@ length one:
 ]
 ```
 
-`name` is what that person will pass to `message-gateway pair NAME` — see
+`name` is what that person will pass to `msg-gw pair NAME` — see
 [Setting up a client (user)](#setting-up-a-client-user). It also feeds the
 session path the daemon derives automatically:
 `encoded:root_dir/gmessages/name_session.enc` — there is no `session_ref` to
@@ -137,7 +137,7 @@ manage their own routing rules remotely (see [Remote rules
 management](#remote-rules-management--client-mode) below) — set their
 `remote_rules.token_ref` too, a separate token from `remote_pairing`'s.
 
-Hand-writing the entry above is not the only way to get there: `message-gateway
+Hand-writing the entry above is not the only way to get there: `msg-gw
 pair NAME --mattermost-user USERNAME` creates it for you the first time NAME
 is paired, routed to a direct message with USERNAME — see [Local
 pairing](#local-pairing--you-have-shell-access-to-the-daemons-host) below.
@@ -152,11 +152,11 @@ evaluated in order, first match wins. `msg-gw rules` manages a user's rules
 without hand-editing `config.json`:
 
 ```bash
-message-gateway rules list jfgratton
-message-gateway rules add jfgratton --name family \
+msg-gw rules list jfgratton
+msg-gw rules add jfgratton --name family \
   --phone "+1 514 555-1212" --phone "+1 514 555-1213" \
   --to-user jfgratton
-message-gateway rules remove jfgratton 1
+msg-gw rules remove jfgratton 1
 ```
 
 - **Create** with `rules add NAME`. It needs at least one matching criterion
@@ -188,7 +188,7 @@ than by convention:
   rejected with an explanation and `config.json` is left untouched.
 
 What this does **not** do is apply the change to a running daemon — `rules
-add`/`rules remove` print a reminder that you still need to run `message-gateway
+add`/`rules remove` print a reminder that you still need to run `msg-gw
 reload` (or send `SIGHUP`, or restart) afterwards, in the same process, for
 it to take effect. See [Reloading a running
 daemon](#reloading-a-running-daemon) below. Also note that a rule only
@@ -204,8 +204,8 @@ the complete flag list.
 ### 6. Validate and run
 
 ```bash
-message-gateway config check
-message-gateway daemon
+msg-gw config check
+msg-gw daemon
 ```
 
 `config check` resolves every secret reference and reports where each one
@@ -232,8 +232,8 @@ Description=msggw — SMS/MMS/RCS to Mattermost gateway
 After=network-online.target
 
 [Service]
-ExecStart=/opt/sbin/message-gateway daemon
-ExecReload=/opt/sbin/message-gateway reload
+ExecStart=/opt/sbin/msg-gw daemon
+ExecReload=/opt/sbin/msg-gw reload
 Restart=on-failure
 User=msggw
 
@@ -256,16 +256,16 @@ silently.
 ### Reloading a running daemon
 
 A full restart is disruptive in a way that isn't always acceptable — most of
-all in a container whose entrypoint does `exec message-gateway daemon`,
+all in a container whose entrypoint does `exec msg-gw daemon`,
 where the daemon *is* the container's PID 1: there's no supervisor sitting
 above it to bring it back if it exits, and no separate process to restart it
-without also restarting the container. `message-gateway reload` (or sending
+without also restarting the container. `msg-gw reload` (or sending
 the daemon `SIGHUP` directly — `kill -HUP 1` inside that container) asks the
 *same, already-running process* to re-read `config.json` and pick up the
 change instead:
 
 ```bash
-message-gateway reload
+msg-gw reload
 ```
 
 This finds the daemon via a pid file it writes at
@@ -361,7 +361,7 @@ This runs `pair` on the same machine as the daemon, using its configuration
 file directly:
 
 ```bash
-message-gateway pair NAME
+msg-gw pair NAME
 ```
 
 `NAME` must match your `name` entry under `users` in the operator's
@@ -370,7 +370,7 @@ configuration — unless it doesn't exist yet, in which case add
 routed to a direct message with that username:
 
 ```bash
-message-gateway pair NAME --mattermost-user YOUR_MATTERMOST_USERNAME
+msg-gw pair NAME --mattermost-user YOUR_MATTERMOST_USERNAME
 ```
 
 `--email YOUR_GOOGLE_ACCOUNT` is optional alongside that — it is recorded for
@@ -401,7 +401,7 @@ Session stored at encoded:/var/lib/msggw/jfgratton.session.enc.
 Verifying the session by reconnecting...
 The phone sent 12 conversations:
   ...
-Pairing complete. Start the bridge with "message-gateway daemon".
+Pairing complete. Start the bridge with "msg-gw daemon".
 ```
 
 If the daemon is already running, it picks up newly-paired sessions on its
@@ -429,7 +429,7 @@ With that token in hand, run `pair` with `--remote` — this needs no config
 file, no Vault access, nothing beyond the daemon's URL and your token:
 
 ```bash
-message-gateway pair NAME \
+msg-gw pair NAME \
   --remote https://msggw.example.net:8443 \
   --token-file ~/.msggw-pairing-token
 ```
@@ -473,7 +473,7 @@ First, **pull** your current rules — always start here, not from memory, so
 you edit the daemon's actual current state:
 
 ```bash
-message-gateway rules pull jfgratton \
+msg-gw rules pull jfgratton \
   --remote https://msggw.example.net:8443 \
   --token-file ~/.msggw-rules-token \
   --file rules.json
@@ -491,7 +491,7 @@ change turns out to be wrong.
 Then **push** the edited rules back:
 
 ```bash
-message-gateway rules push jfgratton \
+msg-gw rules push jfgratton \
   --remote https://msggw.example.net:8443 \
   --token-file ~/.msggw-rules-token \
   --file rules.json
@@ -527,13 +527,13 @@ listener only — don't use it against a real deployment.
 ### Checking your own status
 
 ```bash
-message-gateway status NAME
+msg-gw status NAME
 ```
 
 reports whether a session is stored, which phone it's paired with, and how
 many conversations are currently bridged for you. Add `--offline` to skip the
 network round-trip and only report what's on disk. If you haven't paired
-yet, this reports `NOT PAIRED — run "message-gateway pair NAME"` instead.
+yet, this reports `NOT PAIRED — run "msg-gw pair NAME"` instead.
 
 Note that `status` (like local pairing) needs to run wherever the
 configuration file is — normally the daemon's host, regardless of which
@@ -542,7 +542,7 @@ pairing mode you used to get paired in the first place.
 ### Unpairing
 
 ```bash
-message-gateway logout NAME
+msg-gw logout NAME
 ```
 
 revokes the pairing on the phone and deletes the stored session. If the
@@ -578,11 +578,11 @@ capture for you, by hand:
 
 Then reach `pair` with that JSON in one of three equivalent ways:
 
-- `message-gateway pair NAME --cookies-file cookies.json`
-- `message-gateway pair NAME < cookies.json` (piping it to stdin — `pair`
+- `msg-gw pair NAME --cookies-file cookies.json`
+- `msg-gw pair NAME < cookies.json` (piping it to stdin — `pair`
   treats any non-interactive stdin as this fallback automatically, no flag
   needed)
-- `message-gateway pair NAME --no-browser` and paste the JSON when prompted —
+- `msg-gw pair NAME --no-browser` and paste the JSON when prompted —
   useful when stdin is an interactive terminal but you still don't want a
   browser to launch
 

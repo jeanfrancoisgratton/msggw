@@ -2,7 +2,7 @@
 
 set -eu
 
-BINARY=message-gateway
+BINARY=msg-gw
 OUTPUT="/opt/sbin"
 DRY_RUN=false
 

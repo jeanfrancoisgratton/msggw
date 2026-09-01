@@ -2,7 +2,7 @@
 
 There is no macOS package here — no `.pkg`, no Homebrew formula, nothing a
 package manager tracks. This directory just builds a plain
-`message-gateway` binary, the same way you'd build it on any other machine
+`msg-gw` binary, the same way you'd build it on any other machine
 with Go installed. The two scripts exist only because a Mac won't already
 have the right Go toolchain lying around.
 
@@ -41,28 +41,28 @@ password.
 ./build-macos.sh
 ```
 
-This builds `message-gateway` with `CGO_ENABLED=0` (no C toolchain needed)
-and drops it at `/opt/sbin/message-gateway` by default — the same install
+This builds `msg-gw` with `CGO_ENABLED=0` (no C toolchain needed)
+and drops it at `/opt/sbin/msg-gwy` by default — the same install
 path every other platform this project packages for uses. It works no
 matter which directory you run it from; it finds the Go module (`../src`)
 relative to its own location, not your current directory.
 
 If you're not on `main`/`develop`, the binary is named
-`message-gateway-<branch>` instead, so a build off a feature branch never
+`msg-gw-<branch>` instead, so a build off a feature branch never
 overwrites your main build.
 
 Useful flags:
 
 ```sh
 ./build-macos.sh ~/bin                    # build to a different directory
-./build-macos.sh -b msg-gw                # build under a different binary name
+./build-macos.sh -b message-gateway       # build under a different binary name
 ./build-macos.sh --dry-run                # build, confirm it worked, then delete it
 ```
 
 ## 3. Confirm it
 
 ```sh
-/opt/sbin/message-gateway version
+/opt/sbin/msg-gw version
 ```
 
 From here on, follow [`../docs/RUNNING.md`](../docs/RUNNING.md) to configure

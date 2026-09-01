@@ -20,7 +20,7 @@ CONTROL   := control
 NAME      := $(shell awk -F': +' '/^Package:/{print $$2}'      $(CONTROL))
 VERSION   := $(shell awk -F': +' '/^Version:/{print $$2}'      $(CONTROL))
 ARCH      := $(shell awk -F': +' '/^Architecture:/{print $$2}' $(CONTROL))
-BINARY    := message-gateway
+BINARY    := msg-gw
 
 NEXUSREPO := aptLocal
 SRCDIR    := ../src

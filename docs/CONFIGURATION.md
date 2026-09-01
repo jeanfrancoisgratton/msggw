@@ -1,6 +1,6 @@
 # Configuration
 
-`message-gateway` reads a single JSON file. It looks for it in this order:
+`msg-gw` reads a single JSON file. It looks for it in this order:
 
 1. the path given to `--config` / `-c`;
 2. `/etc/msggw/config.json`;
@@ -9,9 +9,9 @@
 Print a starting point and check it:
 
 ```bash
-message-gateway config sample > /etc/msggw/config.json
+msg-gw config sample > /etc/msggw/config.json
 $EDITOR /etc/msggw/config.json
-message-gateway config check
+msg-gw config check
 ```
 
 `config check` validates the file **and** resolves every secret it refers to,
@@ -103,7 +103,7 @@ truncated session behind.
 
 ### Storage backend
 
-`message-gateway` keeps its bridge state — which Mattermost thread stands for which
+`msg-gw` keeps its bridge state — which Mattermost thread stands for which
 Google Messages conversation, and which post stands for which message — in a
 SQL database. Two backends are supported, chosen and configured through the
 `backend` object:
@@ -138,7 +138,7 @@ across.
 
 **Persistence with `sqlite` is entirely the operator's responsibility.** The
 daemon does nothing beyond writing to `backend.sqlite.path`; there is no
-built-in backup or replication. In particular, if `message-gateway` runs in a
+built-in backup or replication. In particular, if `msg-gw` runs in a
 container, `state_dir` sits in the container's writable layer by default and
 is lost whenever the container is recreated — mount `state_dir` (or at least
 the SQLite file's directory) onto a persistent volume from the host or
@@ -344,7 +344,7 @@ Pairing itself is not a config setting — it is a separate, one-time step, once
 per user:
 
 ```bash
-message-gateway pair NAME
+msg-gw pair NAME
 ```
 
 `NAME` must match one of the `name` entries under `users`.
@@ -356,7 +356,7 @@ signed in, the window closes on its own and the daemon shows an emoji;
 tapping the matching one on Google Messages on the phone confirms the
 pairing. On success, the session is written to the derived path
 `root_dir/gmessages/NAME_session.enc` (see [`gmessages`](#gmessages)), and
-`message-gateway daemon` needs no further interactive step to use it.
+`msg-gw daemon` needs no further interactive step to use it.
 
 For a headless server, an SSH-only box, or a scripted pairing pipeline where
 `pair` can't open a browser, a manual fallback exists: sign into
@@ -375,12 +375,12 @@ full walkthrough.
 
 **Checking whether a user has already paired** — a session at their derived
 path *is* the pairing state; there is no separate flag.
-`message-gateway status [NAME]` reads it (for every user, or just `NAME`) and
+`msg-gw status [NAME]` reads it (for every user, or just `NAME`) and
 reports `NOT PAIRED — run "msg-gw pair NAME"` or `paired with phone <id>`
 (`--offline` skips the network round-trip that confirms Google still honours
 the session). Equivalently, checking for a non-empty file at that path works
 directly — an empty file counts as "not paired," the same as a missing one
-(this is what `message-gateway logout NAME --local-only` leaves behind).
+(this is what `msg-gw logout NAME --local-only` leaves behind).
 
 **Restarting does not re-trigger pairing.** `daemon` loads each user's stored
 session on startup and reconnects with it; it never launches the pairing flow
@@ -394,7 +394,7 @@ that user's bridge does not fail the whole daemon: it retries for 5 attempts,
 user alone — a four-minute window to pair from a separate step:
 
 ```bash
-docker exec -it msggw message-gateway pair NAME --cookies-file cookies.json
+docker exec -it msggw msg-gw pair NAME --cookies-file cookies.json
 docker logs -f msggw
 ```
 
