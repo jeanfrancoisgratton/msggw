@@ -46,7 +46,7 @@
         },
         "rules": [
           {
-            "name": "FAMILLE: vicky desrosiers, liliane gratton, philippe gratton, yoko wakyama",
+            "name": "FAMILLE: vik, lili, phil, yoko",
             "phones": ["+15149690948", "+14385180577", "+14388217445", "+14388809656"],
             "destination": {
               "type": "direct",

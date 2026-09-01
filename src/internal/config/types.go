@@ -38,7 +38,7 @@ type Config struct {
 	// StateDir holds everything the daemon persists that is not a secret: the
 	// SQLite database (when Backend.Driver is sqlite), and downloaded media
 	// while it is in flight.
-	StateDir string `json:"state_dir"`
+	StateDir string `json:"state_dir,omitempty"`
 	// RootDir is the root of the persistent volume for secrets that are
 	// managed at runtime rather than provisioned by the operator — today,
 	// just each user's Google Messages session, which libgm rewrites roughly
@@ -155,6 +155,15 @@ type GMessagesConfig struct {
 	// BackfillCount is how many recent messages to fetch for a conversation the
 	// first time it is bridged. 0 disables backfill.
 	BackfillCount int `json:"backfill_count,omitempty"`
+
+	// GoogleAccount is the email address of the Google account this user is
+	// expected to pair with, as recorded by "msg-gw pair" (its --email flag)
+	// when it provisions a new user. It is documentation only: nothing
+	// resolves or verifies it against the actual signed-in account during
+	// pairing — the interactive browser sign-in determines the real account,
+	// this just gives an operator managing several tenants a record of which
+	// one each was supposed to be.
+	GoogleAccount string `json:"google_account,omitempty"`
 }
 
 // MattermostConfig covers the Mattermost side of the bridge.
@@ -179,9 +188,17 @@ type MattermostConfig struct {
 }
 
 // RoutingConfig decides where in Mattermost a Google Messages conversation
-// shows up. Default applies to everything that no rule matches.
+// shows up. DefaultDirect and DefaultGroup apply to everything that no rule
+// matches, chosen by the conversation's own shape (one-to-one vs. group) —
+// the same distinction Rule.GroupsOnly/DirectsOnly use.
 type RoutingConfig struct {
-	Default Destination `json:"default"`
+	// DefaultDirect is used for a one-to-one conversation that no rule
+	// matches.
+	DefaultDirect Destination `json:"default_direct"`
+	// DefaultGroup is used for a group conversation that no rule matches.
+	// Left unset, it falls back to DefaultDirect — a deployment that does
+	// not care about the distinction only has to write one default.
+	DefaultGroup Destination `json:"default_group,omitempty"`
 	// Rules are evaluated in order; the first match wins.
 	Rules []Rule `json:"rules,omitempty"`
 

@@ -22,8 +22,9 @@ the other: set up the daemon, then pair yourself as its one user.
   - [2. Create the Mattermost bot account](#2-create-the-mattermost-bot-account)
   - [3. Write the configuration](#3-write-the-configuration)
   - [4. Add one `users[]` entry per person](#4-add-one-users-entry-per-person)
-  - [5. Validate and run](#5-validate-and-run)
-  - [6. Keep it running](#6-keep-it-running)
+  - [5. Add, edit and remove routing rules](#5-add-edit-and-remove-routing-rules)
+  - [6. Validate and run](#6-validate-and-run)
+  - [7. Keep it running](#7-keep-it-running)
 - [Setting up a client (user)](#setting-up-a-client-user)
   - [Local pairing — you have shell access to the daemon's host](#local-pairing--you-have-shell-access-to-the-daemons-host)
   - [Remote pairing — client mode](#remote-pairing--client-mode)
@@ -53,7 +54,7 @@ Packaging stubs for Debian, RPM-based distros, Arch and Alpine live under
 `__debian/`, `__redhat/`, `__archlinux/` and `__alpine/` at the repository
 root, each with its own `Makefile`, if you'd rather build a distro package
 than run `build.sh` by hand. There is no systemd unit shipped yet —
-[Keep it running](#6-keep-it-running) below has a minimal one to adapt.
+[Keep it running](#7-keep-it-running) below has a minimal one to adapt.
 
 ### 2. Create the Mattermost bot account
 
@@ -111,7 +112,7 @@ length one:
   {
     "name": "jfgratton",
     "routing": {
-      "default": { "type": "channel", "team": "myteam", "channel": "messages" }
+      "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" }
     }
   }
 ]
@@ -131,7 +132,72 @@ If any of your users will pair remotely instead of on this host (see
 enable the [`listener`](CONFIGURATION.md#listener) and set that user's
 `remote_pairing.token_ref`.
 
-### 5. Validate and run
+Hand-writing the entry above is not the only way to get there: `message-gateway
+pair NAME --mattermost-user USERNAME` creates it for you the first time NAME
+is paired, routed to a direct message with USERNAME — see [Local
+pairing](#local-pairing--you-have-shell-access-to-the-daemons-host) below.
+Useful either way.
+
+### 5. Add, edit and remove routing rules
+
+A user's `routing.default_direct`/`default_group` (step 4) catch everything;
+`routing.rules` let you send specific conversations somewhere else — a
+contact or group routed to its own channel, ahead of the defaults. Rules are
+evaluated in order, first match wins. `msg-gw rules` manages a user's rules
+without hand-editing `config.json`:
+
+```bash
+message-gateway rules list jfgratton
+message-gateway rules add jfgratton --name family \
+  --phone "+1 514 555-1212" --phone "+1 514 555-1213" \
+  --to-user jfgratton
+message-gateway rules remove jfgratton 1
+```
+
+- **Create** with `rules add NAME`. It needs at least one matching criterion
+  (`--conversation-id`, `--phone`, `--name-pattern`, and/or a shape filter —
+  `--groups-only`/`--directs-only`) and exactly one destination
+  (`--to-channel`, `--to-channel-id`, `--to-user`, `--to-users`). The new rule
+  is appended to the end of that user's list.
+- **Remove** with `rules remove NAME INDEX`, where `INDEX` is the 1-based
+  position `rules list NAME` shows.
+- **Edit**: there's no in-place edit yet — `rules remove` the old one and
+  `rules add` the replacement. Since a new rule is always appended, reordering
+  rules (to change which one wins first) works the same way: remove and
+  re-add in the order you want.
+
+Two things are true of every one of these commands, by construction rather
+than by convention:
+
+- They write straight to **whichever `config.json` is currently active** —
+  the same file `config.Load` resolves at startup (`--config`/`-c`, then
+  `/etc/msggw/config.json`, then `$XDG_CONFIG_HOME/msggw/config.json`). Run
+  `rules` with the same `--config` the daemon uses (or from the same host, if
+  you rely on the default paths) and there is no separate "server copy" to
+  keep in sync — it's the one file.
+- Every change is **sanity-checked before it touches that file**: the
+  candidate configuration is validated exactly as `msg-gw config check`
+  validates `config.json` at daemon startup, and is only written — atomically
+  — once it loads cleanly. A rule that would leave the configuration invalid
+  (bad regex, malformed destination, missing team/channel, and so on) is
+  rejected with an explanation and `config.json` is left untouched.
+
+What this does **not** do is reload the running daemon. There is no
+live-reload yet, so a rule change has no effect until the daemon is
+restarted (see [Keep it running](#7-keep-it-running)) — `rules add`/`rules
+remove` print a reminder to that effect. Restarting is safe to do at any
+time: it reloads each user's stored session and reconnects silently (see
+step 7), it does not re-trigger pairing. Also note that a rule only applies
+to a conversation the **first** time it's bridged — changing the rules later
+does not move an already-bridged conversation's existing thread, so this is
+a good one to get right before a conversation shows up for the first time,
+not necessarily something to restart the daemon for on every edit.
+
+See [`routing`](CONFIGURATION.md#routing) for the full field reference and
+matching semantics, and `msg-gw rules --help` / `msg-gw rules add --help` for
+the complete flag list.
+
+### 6. Validate and run
 
 ```bash
 message-gateway config check
@@ -151,7 +217,7 @@ No user needs to be paired before the daemon starts — see [Setting up a
 client (user)](#setting-up-a-client-user) for that step, which can happen
 before, during, or after the daemon is running.
 
-### 6. Keep it running
+### 7. Keep it running
 
 There's no shipped systemd unit yet, but a minimal one is enough to get
 started:
@@ -181,10 +247,11 @@ silently.
 ## Setting up a client (user)
 
 This is the per-person, one-time step that links your Android phone's Google
-Messages app to one `users[]` entry the operator has already created for you
-(step 4 above). Pairing is not a config setting — it's the `pair` command,
-run once per user, and the resulting session is what makes `status` report
-"paired" from then on.
+Messages app to one `users[]` entry — either one the operator already created
+for you (step 4 above), or one `pair` creates on the spot the first time you
+run it, given `--mattermost-user`. Pairing is not just a config setting — it's
+the `pair` command, run once per user, and the resulting session is what makes
+`status` report "paired" from then on.
 
 Either way, pairing needs a signed-in Google Messages web session — Google
 retired QR-code device pairing, so `pair` authenticates as your Google
@@ -212,7 +279,19 @@ message-gateway pair NAME
 ```
 
 `NAME` must match your `name` entry under `users` in the operator's
-configuration. A browser window opens to Google's sign-in page; sign in
+configuration — unless it doesn't exist yet, in which case add
+`--mattermost-user YOUR_MATTERMOST_USERNAME` and `pair` creates it for you,
+routed to a direct message with that username:
+
+```bash
+message-gateway pair NAME --mattermost-user YOUR_MATTERMOST_USERNAME
+```
+
+`--email YOUR_GOOGLE_ACCOUNT` is optional alongside that — it is recorded for
+`status` to show later, never checked against the account you actually sign
+into below. Neither flag does anything once NAME already exists.
+
+Either way, a browser window opens to Google's sign-in page; sign in
 there as you normally would. Once you're signed in, the window closes and
 the command prints an emoji:
 

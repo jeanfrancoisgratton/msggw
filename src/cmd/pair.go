@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"msggw/internal/browserauth"
+	"msggw/internal/config"
 	"msggw/internal/gmessages"
 	"msggw/internal/pairclient"
 )
@@ -31,6 +32,9 @@ var (
 	pairToken              string
 	pairTokenFile          string
 	pairInsecureSkipVerify bool
+	pairEmail              string
+	pairMattermostServer   string
+	pairMattermostUser     string
 )
 
 var pairCmd = &cobra.Command{
@@ -38,8 +42,21 @@ var pairCmd = &cobra.Command{
 	Short: "Pair the daemon with Google Messages on your phone",
 	Long: `Pair the daemon with the Google Messages app on your Android phone.
 
-NAME must match one of the "name" entries under "users" in the configuration —
-this is which tenant the pairing is stored against.
+NAME is which tenant the pairing is stored against — a "name" entry under
+"users" in the configuration. If NAME does not exist yet, --mattermost-user
+provisions it: pair creates that users[] entry (routed to a direct message
+with --mattermost-user by default) before pairing, using the same
+config-mutation and validation "msg-gw rules" uses, so a bad provisioning
+request is rejected before it ever touches config.json. --email records which
+Google account NAME is expected to pair with (shown by "msg-gw status") —
+it is documentation only, never verified against the account you actually
+sign into. --mattermost-server, if given, is checked against the configured
+mattermost.url as a sanity check, useful when several deployments' configs
+might otherwise be confused for one another. None of --email,
+--mattermost-server or --mattermost-user do anything once NAME already
+exists — provisioning only happens once, the first time NAME is paired.
+Provisioning is local-only; it has no effect with --remote (see below), where
+the daemon's own configuration must already have NAME.
 
 Google killed QR-code device pairing, so this authenticates as your Google
 account instead. By default, pair opens a browser window for you to sign into
@@ -88,6 +105,10 @@ variable.`,
 		}
 
 		if pairRemote != "" {
+			if pairEmail != "" || pairMattermostServer != "" || pairMattermostUser != "" {
+				return fmt.Errorf("--email, --mattermost-server and --mattermost-user provision a user locally; " +
+					"they have no effect with --remote, where the daemon's own configuration must already have NAME")
+			}
 			return runRemotePairing(ctx, out, args[0], cookies)
 		}
 
@@ -95,12 +116,12 @@ variable.`,
 		if err != nil {
 			return err
 		}
-		log := newLogger(cfg)
 
-		user, err := findUser(cfg, args[0])
+		cfg, user, err := provisionUser(out, cfg, args[0])
 		if err != nil {
 			return err
 		}
+		log := newLogger(cfg)
 
 		gmCfg, err := newGMessagesConfig(user, cfg, log)
 		if err != nil {
@@ -127,6 +148,81 @@ variable.`,
 		fmt.Fprintf(out, "Session stored at %s.\n", gmCfg.Session.Describe())
 		return verifyPairing(ctx, out, pairing)
 	},
+}
+
+// provisionUser finds name among cfg's users, or — if --mattermost-user was
+// given — creates it via config.Mutate, so "pair" can be the first command
+// run against a brand-new tenant instead of requiring config.json to be
+// hand-edited first. An existing user is returned unchanged; --email,
+// --mattermost-server and --mattermost-user are only consulted the one time
+// a user does not exist yet.
+func provisionUser(out io.Writer, cfg *config.Config, name string) (*config.Config, config.UserConfig, error) {
+	if user, err := findUser(cfg, name); err == nil {
+		if pairMattermostServer != "" {
+			if err := checkMattermostServer(cfg, pairMattermostServer); err != nil {
+				return nil, config.UserConfig{}, err
+			}
+		}
+		if pairEmail != "" || pairMattermostUser != "" {
+			fmt.Fprintf(out, "%q already exists; ignoring --email/--mattermost-user (only used to provision a new user).\n", name)
+		}
+		return cfg, user, nil
+	}
+
+	if pairMattermostUser == "" {
+		return nil, config.UserConfig{}, fmt.Errorf(
+			"no user named %q in %s; pass --mattermost-user to create one (see \"msg-gw pair --help\")", name, cfg.Path())
+	}
+	if pairMattermostServer != "" {
+		if err := checkMattermostServer(cfg, pairMattermostServer); err != nil {
+			return nil, config.UserConfig{}, err
+		}
+	}
+
+	newUser := config.UserConfig{
+		Name: name,
+		GMessages: config.GMessagesConfig{
+			GoogleAccount: pairEmail,
+		},
+		Routing: config.RoutingConfig{
+			DefaultDirect: config.Destination{Type: config.DestDirect, User: pairMattermostUser},
+		},
+	}
+
+	newCfg, err := config.Mutate(cfg.Path(), func(c *config.Config) error {
+		for _, u := range c.Users {
+			if u.Name == name {
+				return fmt.Errorf("%q already exists in %s", name, cfg.Path())
+			}
+		}
+		c.Users = append(c.Users, newUser)
+		return nil
+	})
+	if err != nil {
+		return nil, config.UserConfig{}, err
+	}
+
+	fmt.Fprintf(out, "Created user %q, routed to a direct message with @%s.\n", name, pairMattermostUser)
+
+	user, err := findUser(newCfg, name)
+	if err != nil {
+		return nil, config.UserConfig{}, err
+	}
+	return newCfg, user, nil
+}
+
+// checkMattermostServer compares --mattermost-server against the daemon's
+// actual configured Mattermost URL — a sanity check against pairing (or
+// provisioning) against the wrong deployment's configuration.
+func checkMattermostServer(cfg *config.Config, given string) error {
+	actual, err := cfg.MattermostURL()
+	if err != nil {
+		return fmt.Errorf("--mattermost-server: could not resolve the configured mattermost.url to check against: %w", err)
+	}
+	if strings.TrimRight(given, "/") != strings.TrimRight(actual, "/") {
+		return fmt.Errorf("--mattermost-server %q does not match the configured mattermost.url %q", given, actual)
+	}
+	return nil
 }
 
 // runRemotePairing drives the same pairing flow as the local branch above,
@@ -280,4 +376,10 @@ func init() {
 		"file containing the bearer token for --remote")
 	pairCmd.Flags().BoolVar(&pairInsecureSkipVerify, "insecure-skip-verify", false,
 		"skip TLS certificate verification for --remote (testing only)")
+	pairCmd.Flags().StringVar(&pairEmail, "email", "",
+		"the Google account NAME is expected to pair with; recorded for \"msg-gw status\", never verified (only used when provisioning a new NAME)")
+	pairCmd.Flags().StringVar(&pairMattermostServer, "mattermost-server", "",
+		"checked against the configured mattermost.url as a sanity check")
+	pairCmd.Flags().StringVar(&pairMattermostUser, "mattermost-user", "",
+		"the Mattermost username NAME's messages default to (required to provision a new NAME)")
 }

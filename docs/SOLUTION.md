@@ -348,8 +348,9 @@ channelID, err := b.mm.ResolveDestination(ctx, destination)
 
 `b.router.Route` (`internal/bridge/routing.go:85`) is where your `routing.rules`
 config actually gets applied — matched against phone number, conversation ID, or
-a name pattern, first match wins, falling back to `routing.default` if nothing
-matches. This is pure config-driven logic; nothing about *where* things land in
+a name pattern, first match wins, falling back to `routing.default_direct` or
+`routing.default_group` — chosen by whether the conversation is one-to-one or
+a group — if nothing matches. This is pure config-driven logic; nothing about *where* things land in
 Mattermost is hard-coded anywhere else in the program. Once a destination (a
 channel, a DM, a group DM) is decided, `mm.ResolveDestination` turns that
 abstract destination into an actual Mattermost channel ID, making REST calls to

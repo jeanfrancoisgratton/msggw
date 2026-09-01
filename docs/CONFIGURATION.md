@@ -306,6 +306,13 @@ independently of the others: one person's session being unpaired, revoked, or
 otherwise broken is logged and that user's bridge simply does not start — it
 does not stop any other user's bridge, or the daemon as a whole.
 
+A `users[]` entry does not have to be written by hand: `msg-gw pair NAME
+--mattermost-user USERNAME` creates one the first time `NAME` is paired
+(routed to a direct message with `USERNAME`), and `msg-gw rules add/remove
+NAME` (see [Rules](#rules)) manages `routing.rules` on an existing one — both
+go through the same validated, atomic write as hand-editing this file plus
+`msg-gw config check`.
+
 ### `gmessages`
 
 This user's session is not configured here at all — it is derived
@@ -319,6 +326,7 @@ collide with another user's session.
 | `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
 | `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
 | `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged. `0` disables backfill. |
+| `google_account` | string | — | The Google account this user is expected to pair with, as recorded by `msg-gw pair --email` when it provisions a new user (see [`users`](#users)). Documentation only — never resolved or checked against the account actually signed into during pairing. |
 
 ### Pairing
 
@@ -452,7 +460,8 @@ routing is not shared.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `default` | destination | — | **Required.** Used for every conversation no rule matches. |
+| `default_direct` | destination | — | **Required.** Used for a one-to-one conversation no rule matches. |
+| `default_group` | destination | `default_direct` | Used for a group conversation no rule matches. Omit it entirely if you don't want group chats treated any differently from one-to-one ones. |
 | `rules` | list of rules | `[]` | Evaluated in order; the first match wins. |
 | `thread_per_conversation` | bool | `true` | See [Threads](#threads). |
 | `post_delivery_status` | bool | `false` | See [Delivery status](#delivery-status). |
@@ -512,6 +521,26 @@ A rule is applied when a conversation is **first** bridged. Changing the rules
 later does not move existing threads — that would strand their history — so it
 only affects conversations bridged after the change.
 
+**`msg-gw rules`** adds, removes and lists a user's rules without
+hand-editing this file:
+
+```bash
+msg-gw rules list jfgratton
+msg-gw rules add jfgratton --name family \
+  --phone "+1 514 555-1212" --phone "+1 514 555-1213" \
+  --to-user jfgratton
+msg-gw rules remove jfgratton 1
+```
+
+The change is validated the same way `msg-gw config check` validates this
+file, and is written to disk only once the result loads cleanly. It edits
+`config.json` directly, in place — there is no live-reload yet, so the
+running daemon needs a restart to pick up the change. See `msg-gw rules
+--help` for the full flag reference (`--to-channel`, `--to-channel-id`,
+`--to-user`, `--to-users` for destinations; `--conversation-id`,
+`--name-pattern`, `--groups-only`, `--directs-only` alongside `--phone` for
+criteria).
+
 #### Threads
 
 With `thread_per_conversation: true` (the default), each Google Messages
@@ -562,7 +591,7 @@ entry of the top-level `users` array, alongside that user's `gmessages` block.
 
 ```json
 "routing": {
-  "default": { "type": "channel", "team": "myteam", "channel": "messages" },
+  "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" },
   "join_channels": true
 }
 ```
@@ -571,36 +600,39 @@ entry of the top-level `users` array, alongside that user's `gmessages` block.
 
 ```json
 "routing": {
-  "default": { "type": "direct", "user": "jfgratton" }
+  "default_direct": { "type": "direct", "user": "jfgratton" }
 }
 ```
 
 ### Family in DMs, group chats in their own channel, everything else in #messages
 
+`default_group` covers "every group chat that isn't otherwise routed" on its
+own — no `groups_only` rule needed for that part:
+
 ```json
 "routing": {
-  "default": { "type": "channel", "team": "myteam", "channel": "messages" },
+  "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" },
+  "default_group": { "type": "channel", "team": "myteam", "channel": "group-messages" },
   "rules": [
     {
       "name": "family",
       "phones": ["+1 514 555-1212", "+1 514 555-1213"],
       "destination": { "type": "direct", "user": "jfgratton" }
-    },
-    {
-      "name": "group chats",
-      "groups_only": true,
-      "destination": { "type": "channel", "team": "myteam", "channel": "group-messages" }
     }
   ],
   "join_channels": true
 }
 ```
 
+A `groups_only` rule is still the right tool when *some* group chats need
+special handling — say, one particular group pinned to its own channel — with
+`default_group` left to catch the rest.
+
 ### One conversation pinned to its own channel, with no threading
 
 ```json
 "routing": {
-  "default": { "type": "channel", "team": "myteam", "channel": "messages" },
+  "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" },
   "rules": [
     {
       "name": "the on-call number",
@@ -623,14 +655,18 @@ only when each routed channel holds exactly one conversation.
 "users": [
   {
     "name": "jfgratton",
-    "routing": { "default": { "type": "direct", "user": "jfgratton" } }
+    "routing": { "default_direct": { "type": "direct", "user": "jfgratton" } }
   },
   {
     "name": "kiddo",
-    "routing": { "default": { "type": "direct", "user": "kiddo" } }
+    "routing": { "default_direct": { "type": "direct", "user": "kiddo" } }
   }
 ]
 ```
+
+Neither user sets `default_group` here, so group chats fall back to the same
+DM as everything else — fine for a deployment that doesn't need the
+distinction.
 
 Neither user needs a `gmessages.session_ref` — `root_dir` alone is enough
 for the daemon to derive `encoded:/data/gmessages/jfgratton_session.enc` and

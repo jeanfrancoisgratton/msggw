@@ -35,8 +35,11 @@ func TestSampleIsValid(t *testing.T) {
 	}
 
 	first := cfg.Users[0]
-	if first.Routing.Default.Type != DestChannel {
-		t.Errorf("sample default route type = %q, want %q", first.Routing.Default.Type, DestChannel)
+	if first.Routing.DefaultDirect.Type != DestChannel {
+		t.Errorf("sample default_direct route type = %q, want %q", first.Routing.DefaultDirect.Type, DestChannel)
+	}
+	if first.Routing.DefaultGroup.Type != DestChannel {
+		t.Errorf("sample default_group route type = %q, want %q", first.Routing.DefaultGroup.Type, DestChannel)
 	}
 	if len(first.Routing.Rules) == 0 {
 		t.Error("the sample's first user has no routing rules, so it does not demonstrate routing")
@@ -53,7 +56,7 @@ const minimalConfig = `{
   "mattermost": {"url": "https://mm.example.net", "token_ref": "env:TOKEN"},
   "users": [
     {"name": "u1",
-     "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}
+     "routing": {"default_direct": {"type": "channel", "team": "t", "channel": "c"}}}
   ]
 }`
 
@@ -82,11 +85,46 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 }
 
+// TestDefaultGroupIsOptional covers the whole point of splitting routing.default
+// into default_direct/default_group: a deployment that does not care about the
+// distinction only has to write default_direct.
+func TestDefaultGroupIsOptional(t *testing.T) {
+	cfg, err := Load(writeConfig(t, minimalConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Users[0].Routing.DefaultGroup.Type; got != "" {
+		t.Errorf("DefaultGroup.Type = %q, want unset when not configured", got)
+	}
+}
+
+// TestDefaultGroupValidatedWhenSet covers that an explicitly set default_group
+// is held to the same standard as default_direct — it is optional, not
+// exempt from validation once present.
+func TestDefaultGroupValidatedWhenSet(t *testing.T) {
+	body := `{
+	  "root_dir": "/tmp",
+	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
+	  "users": [{"name": "u1",
+	    "routing": {
+	      "default_direct": {"type": "channel", "team": "t", "channel": "c"},
+	      "default_group": {"type": "channel", "channel": "missing-team"}
+	    }}]}`
+
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("a default_group missing \"team\" was accepted")
+	}
+	if !strings.Contains(err.Error(), "default_group") {
+		t.Errorf("the error does not name the offending field: %v", err)
+	}
+}
+
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	body := `{"state_dir": "/tmp", "state_directory": "/tmp", "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [{"name": "u1",
-	             "routing": {"default": {"type": "channel", "team": "t", "channel": "c"}}}]}`
+	             "routing": {"default_direct": {"type": "channel", "team": "t", "channel": "c"}}}]}`
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {
@@ -192,7 +230,7 @@ func TestRuleWithoutCriteriaIsRejected(t *testing.T) {
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [{"name": "u1",
 	    "routing": {
-	      "default": {"type": "channel", "team": "t", "channel": "c"},
+	      "default_direct": {"type": "channel", "team": "t", "channel": "c"},
 	      "rules": [{"name": "oops", "destination": {"type": "direct", "user": "jf"}}]
 	    }}]}`
 
@@ -357,7 +395,7 @@ func TestRuleWithBothShapeFiltersIsRejected(t *testing.T) {
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [{"name": "u1",
 	    "routing": {
-	      "default": {"type": "channel", "team": "t", "channel": "c"},
+	      "default_direct": {"type": "channel", "team": "t", "channel": "c"},
 	      "rules": [{"name": "both", "groups_only": true, "directs_only": true,
 	                 "destination": {"type": "direct", "user": "jf"}}]
 	    }}]}`
@@ -419,9 +457,9 @@ func TestUserNameMustBeUnique(t *testing.T) {
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [
 	    {"name": "dup",
-	     "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}},
+	     "routing": {"default_direct": {"type": "channel", "team": "t", "channel": "a"}}},
 	    {"name": "dup",
-	     "routing": {"default": {"type": "channel", "team": "t", "channel": "b"}}}
+	     "routing": {"default_direct": {"type": "channel", "team": "t", "channel": "b"}}}
 	  ]}`
 
 	_, err := Load(writeConfig(t, body))
@@ -441,7 +479,7 @@ func TestUserNameIsRequired(t *testing.T) {
 	  "root_dir": "/tmp",
 	  "mattermost": {"url": "https://mm", "token_ref": "env:T"},
 	  "users": [{
-	    "routing": {"default": {"type": "channel", "team": "t", "channel": "a"}}}]}`
+	    "routing": {"default_direct": {"type": "channel", "team": "t", "channel": "a"}}}]}`
 
 	_, err := Load(writeConfig(t, body))
 	if err == nil {

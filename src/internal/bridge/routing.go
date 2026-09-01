@@ -81,14 +81,18 @@ func NewRouter(cfg config.RoutingConfig) (*Router, error) {
 }
 
 // Route returns the destination for a conversation and the name of the rule
-// that chose it, which is "default" when no rule matched.
+// that chose it, which is "default (direct)" or "default (group)" when no
+// rule matched.
 func (r *Router) Route(conv gmessages.Conversation) (config.Destination, string) {
 	for _, rule := range r.rules {
 		if rule.matches(conv) {
 			return rule.rule.Destination, rule.name
 		}
 	}
-	return r.cfg.Default, "default"
+	if conv.IsGroup && r.cfg.DefaultGroup.Type != "" {
+		return r.cfg.DefaultGroup, "default (group)"
+	}
+	return r.cfg.DefaultDirect, "default (direct)"
 }
 
 // matches reports whether a conversation satisfies a rule.

@@ -138,7 +138,7 @@ conversations somewhere other than the default:
 
 ```json
 "routing": {
-  "default": { "type": "channel", "team": "myteam", "channel": "messages" },
+  "default_direct": { "type": "channel", "team": "myteam", "channel": "messages" },
   "rules": [
     { "name": "family",
       "phones": ["+1 514 555-1212"],
