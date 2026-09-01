@@ -55,6 +55,28 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Tue Sep 01 2026 Binary package builder <builder@famillegratton.net> 0.9.0-1
+- chore: changed the binary name to msg-gw
+- feat: self-service routing-rules push over the listener; 0.9.0 version bump
+- feat: added a daemon reload command
+- Merge branch 'configs' into develop
+- chore: doc update
+- chore: builddeps upgrade
+- feat: let pair provision a new user (--mattermost-user, --email, --mattermost-server)
+- feat: add msg-gw rules command (add/remove/list) on the config-mutation layer
+- feat: add an atomic, validated config-mutation layer
+- feat: split routing.default into default_direct/default_group
+- chore: doc refactoring
+- feat: config refactoring
+- feature: automated pairing process (take3)
+- Merge branch 'docs' into develop
+- docs actualised to simplify the pairing process
+- focus on doc
+- chore: update changelog for 0.7.1-2
+- Merge branch 'develop'
+- more targetdir fixes
+- chore: update changelog for 0.7.1-1
+
 * Sun Aug 30 2026 Binary package builder <builder@famillegratton.net> 0.7.1-2
 - Merge branch 'develop'
 - more targetdir fixes
