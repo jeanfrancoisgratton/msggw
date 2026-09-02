@@ -431,9 +431,12 @@ It needs two things configured:
    ```
 
    Generate the token yourself (anything unguessable — `openssl rand -hex 32`
-   is fine) and hand it to that user out of band. Leaving `token_ref` unset,
-   or empty, disables remote pairing for that user: the endpoint answers 403
-   rather than accepting an unauthenticated cookie handoff.
+   is fine, or `msg-gw tokengen`, which also saves it straight to a
+   [secret reference](#secret-references) instead of printing it for you to
+   copy: `msg-gw tokengen vault:secrets/msggw#jfgratton_pairing_token`) and
+   hand it to that user out of band. Leaving `token_ref` unset, or empty,
+   disables remote pairing for that user: the endpoint answers 403 rather
+   than accepting an unauthenticated cookie handoff.
 
 With both in place, the operator runs the exact same `msg-gw pair` command
 they would locally, but on their own laptop or phone, with `--remote` and
@@ -481,9 +484,10 @@ listener setup as client-mode pairing, plus a **separate** per-user token:
 
 This is deliberately not the same `token_ref` as `remote_pairing`: re-pairing
 a phone and editing one's own routing rules are different-blast-radius
-capabilities, independently grantable and revocable. Leaving `token_ref`
-unset, or empty, disables remote rules management for that user, the same
-way an unset `remote_pairing.token_ref` disables remote pairing.
+capabilities, independently grantable and revocable — generate it the same
+way, e.g. `msg-gw tokengen vault:secrets/msggw#jfgratton_rules_token`. Leaving
+`token_ref` unset, or empty, disables remote rules management for that user,
+the same way an unset `remote_pairing.token_ref` disables remote pairing.
 
 See [RUNNING.md § Remote rules management](RUNNING.md#remote-rules-management--client-mode)
 for the full `msg-gw rules pull`/`push --remote` walkthrough. In short:

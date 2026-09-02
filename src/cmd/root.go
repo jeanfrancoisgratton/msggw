@@ -43,7 +43,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the software version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(hftx.White("msg-gw 0.9.0 (2026.09.01), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+		fmt.Println(hftx.White("msg-gw 0.10.0 (2026.09.01), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
 	},
 }
 
@@ -61,5 +61,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "",
 		"configuration file (default /etc/msggw/config.json, then $XDG_CONFIG_HOME/msggw/config.json)")
 
-	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, reloadCmd, statusCmd, logoutCmd, rulesCmd, versionCmd)
+	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, reloadCmd, statusCmd, logoutCmd, rulesCmd, tokengenCmd, versionCmd)
 }
