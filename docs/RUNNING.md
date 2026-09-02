@@ -136,6 +136,8 @@ enable the [`listener`](CONFIGURATION.md#listener) and set that user's
 manage their own routing rules remotely (see [Remote rules
 management](#remote-rules-management--client-mode) below) — set their
 `remote_rules.token_ref` too, a separate token from `remote_pairing`'s.
+`msg-gw tokengen` generates these (see
+[CONFIGURATION.md § Client-mode pairing](CONFIGURATION.md#client-mode-pairing)).
 
 Hand-writing the entry above is not the only way to get there: `msg-gw
 pair NAME --mattermost-user USERNAME` creates it for you the first time NAME

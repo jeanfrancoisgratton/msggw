@@ -3,8 +3,8 @@
 %define _name msggw
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
-%define _version 0.9.0
-%define _rel 2
+%define _version 0.10.0
+%define _rel 1
 %define _arch x86_64
 %define _binaryname msg-gw
 
@@ -55,6 +55,15 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Tue Sep 01 2026 Binary package builder <builder@famillegratton.net> 0.9.0-2
+- Merge branch 'develop'
+- chore: changed binary name in the version subcommand; cosmetic change
+- chore: documentation update
+- removed dontexec flags
+- removed dontexec flags
+- bug(ARCHBUILDER): fixed race condition in test suite; prod code was not involved
+- chore: update changelog for 0.9.0-1
+
 * Tue Sep 01 2026 Binary package builder <builder@famillegratton.net> 0.9.0-1
 - chore: changed the binary name to msg-gw
 - feat: self-service routing-rules push over the listener; 0.9.0 version bump

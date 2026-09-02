@@ -1,10 +1,10 @@
 {
   "state_dir": "/var/lib/msggw",
-  "root_dir": "/data/msggw",
+  "root_dir": "/data",
   "backend": {
     "driver": "postgres",
     "sqlite": {
-      "path": "vault:containers/msggw#msggw_sqllite_datapath"
+      "path": "sqlite3/msggw.db"
     },
     "postgres": {
       "dsn_ref": "vault:containers/msggw#msggw_pgsql_dsn"
@@ -13,7 +13,7 @@
 
   "log": {
     "level": "info",
-    "format": "json"
+    "format": "text"
   },
 
   "vault": {
@@ -29,6 +29,13 @@
     "request_timeout_seconds": 30
   },
 
+
+  "listener": {
+    "port": 1106,
+    "cert_file": "/etc/msggw/tls/msggw.famillegratton.net.crt",
+    "key_file": "/etc/msggw/tls/msggw.famillegratton.net.key"
+  },
+
   "users": [
     {
       "name": "jfgratton",
@@ -39,27 +46,23 @@
         "backfill_count": 0
       },
       "routing": {
-        "default": {
+        "default_direct": {
           "type": "channel",
-          "team": "famille",
-          "channel": "rcs-mms-sms"
+          "team": "MessageGateway",
+          "channel": "messages"
+        },
+        "default_group": {
+          "type": "channel",
+          "team": "MessageGateway",
+          "channel": "group-messages"
         },
         "rules": [
           {
-            "name": "FAMILLE: vik, lili, phil, yoko",
+            "name": "Famille: vik, lili, phil, yoko",
             "phones": ["+15149690948", "+14385180577", "+14388217445", "+14388809656"],
             "destination": {
               "type": "direct",
-              "user": "vault:containers/msggw#mmost_user"
-            }
-          },
-          {
-            "name": "group chats get their own channel",
-            "groups_only": true,
-            "destination": {
-              "type": "channel",
-              "team": "vault:containers/msggw#mmost_team",
-              "channel": "messages-de-groupes"
+              "user": "jfgratton"
             }
           }
         ],
