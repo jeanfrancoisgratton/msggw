@@ -35,6 +35,13 @@ const (
 
 // Config is the whole daemon configuration, read from a JSON file.
 type Config struct {
+	// Comment is free text for whoever is editing this file; the daemon reads
+	// it (so a config that sets one still round-trips through "msg-gw rules
+	// push"/Mutate unchanged) but otherwise ignores it entirely. Every section
+	// below that is itself a JSON object accepts the same "_comment" key, for
+	// the same reason — annotate any section without the daemon caring.
+	Comment string `json:"_comment,omitempty"`
+
 	// StateDir holds everything the daemon persists that is not a secret: the
 	// SQLite database (when Backend.Driver is sqlite), and downloaded media
 	// while it is in flight.
@@ -68,6 +75,9 @@ type Config struct {
 // own routing. Everything else (Mattermost, the database, logging) is
 // shared across every tenant in Users.
 type UserConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// Name identifies this tenant — in pairing ("msg-gw pair NAME"), in
 	// status output, and as the tenant column's value in storage. It must be
 	// unique among Users.
@@ -90,6 +100,9 @@ type UserConfig struct {
 // separate "enabled" flag, the same way ListenerConfig.Port uses 0 to mean
 // off.
 type RemotePairingConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// TokenRef resolves to the bearer token a remote client must present in
 	// its Authorization header. Unlike the Google Messages session, which
 	// libgm rewrites roughly hourly, this is never written back, so any
@@ -108,6 +121,9 @@ type RemotePairingConfig struct {
 // Empty TokenRef disables remote rules management for this user, the same
 // way RemotePairing.TokenRef being empty disables remote pairing.
 type RemoteRulesConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// TokenRef resolves to the bearer token a remote client must present in
 	// its Authorization header.
 	TokenRef string `json:"token_ref,omitempty"`
@@ -118,6 +134,9 @@ type RemoteRulesConfig struct {
 // ever read, so an operator can switch backends by changing Driver alone,
 // without having to first go write the other block's settings.
 type BackendConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// Driver selects the storage backend: DatabaseDriverSQLite (default) or
 	// DatabaseDriverPostgres.
 	Driver string `json:"driver,omitempty"`
@@ -130,6 +149,9 @@ type BackendConfig struct {
 // SQLiteBackendConfig is consulted only when BackendConfig.Driver is
 // DatabaseDriverSQLite.
 type SQLiteBackendConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// Path is the SQLite file. Relative paths resolve inside StateDir.
 	Path string `json:"path,omitempty"`
 }
@@ -137,6 +159,9 @@ type SQLiteBackendConfig struct {
 // PostgresBackendConfig is consulted only when BackendConfig.Driver is
 // DatabaseDriverPostgres.
 type PostgresBackendConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// DSNRef is a secret reference resolving to the PostgreSQL DSN
 	// (e.g. "postgres://user:pass@host:5432/dbname?sslmode=disable"). It is
 	// a reference rather than a plain string so the password does not sit in
@@ -147,6 +172,9 @@ type PostgresBackendConfig struct {
 // LogConfig controls the daemon's own logging. libgm logs through zerolog and
 // the rest of the daemon through slog; both are driven from here.
 type LogConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// Level is one of debug, info, warn, error.
 	Level string `json:"level,omitempty"`
 	// Format is "text" or "json".
@@ -155,6 +183,9 @@ type LogConfig struct {
 
 // GMessagesConfig covers the Google Messages side of the bridge.
 type GMessagesConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// PingIntervalSeconds is how often libgm pings the phone. libgm clamps
 	// this to [1 minute, 4 hours]; 0 keeps its default of one minute.
 	PingIntervalSeconds int `json:"ping_interval_seconds,omitempty"`
@@ -190,6 +221,9 @@ type GMessagesConfig struct {
 // to read replies, upload files or edit posts, so it is not an alternative
 // here — see docs/SOLUTION.md.
 type MattermostConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// URL is the server root, e.g. https://mattermost.example.net.
 	URL string `json:"url"`
 	// TokenRef resolves to the bot account's personal access token.
@@ -209,6 +243,9 @@ type MattermostConfig struct {
 // matches, chosen by the conversation's own shape (one-to-one vs. group) —
 // the same distinction Rule.GroupsOnly/DirectsOnly use.
 type RoutingConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// DefaultDirect is used for a one-to-one conversation that no rule
 	// matches.
 	DefaultDirect Destination `json:"default_direct"`
@@ -253,6 +290,9 @@ func (r RoutingConfig) ThreadPerConversationEnabled() bool {
 // The listener is disabled unless Port is set; there is no separate "enabled"
 // flag, the same way GMessagesConfig.BackfillCount uses 0 to mean off.
 type ListenerConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
 	// Port is what the listener binds to, on all interfaces. 0 disables it.
 	Port int `json:"port,omitempty"`
 	// CertFile and KeyFile are the TLS certificate and private key, as plain

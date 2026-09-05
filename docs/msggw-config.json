@@ -17,8 +17,9 @@
   },
 
   "vault": {
+    "_comment": "the 'env:' URI scheme can be replaced with the 'literal:' scheme",
     "address": "env:VAULT_ADDR",
-    "token_ref": "env:VAULT_TOKEN"
+    "token_ref": "env:VAULT_MSGGW_RO"
   },
 
   "mattermost": {

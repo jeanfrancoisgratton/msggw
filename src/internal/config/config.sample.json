@@ -17,6 +17,7 @@
   },
 
   "vault": {
+    "_comment": "the 'env:' URI scheme can be replaced with the 'literal:' scheme",
     "address": "https://vault.example.net:8200",
     "token_ref": "env:VAULT_TOKEN"
   },

@@ -41,6 +41,11 @@ type Store interface {
 // is optional: vaultLib falls back to the usual VAULT_* environment variables
 // for anything left empty.
 type VaultConfig struct {
+	// Comment is documentation only; the daemon reads it back on a rewrite
+	// (e.g. via Mutate) but otherwise ignores it. See config.Config.Comment,
+	// which every JSON object in the configuration accepts the same way.
+	Comment string `json:"_comment,omitempty"`
+
 	Address string `json:"address,omitempty"`
 	// TokenRef is itself a secret reference, so that the Vault token can come
 	// from a file or the environment rather than sitting in the config file.

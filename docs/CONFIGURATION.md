@@ -26,6 +26,7 @@ than a silently-applied default.
 ## Table of contents
 
 - [Secret references](#secret-references)
+- [Comments](#comments)
 - [Top level](#top-level)
   - [Storage backend](#storage-backend)
 - [`log`](#log)
@@ -89,6 +90,25 @@ truncated session behind.
 > than an error. For the session this is caught downstream, where the result is
 > parsed as JSON; for an arbitrary token it is not caught at all. Use `vault:`
 > when the difference matters.
+
+---
+
+## Comments
+
+JSON has no comment syntax, so every object in this file — the top level and
+every section below it — accepts an optional `_comment` key instead:
+
+```json
+"vault": {
+  "_comment": "the 'env:' URI scheme can be replaced with the 'literal:' scheme",
+  "address": "env:VAULT_ADDR",
+  "token_ref": "env:VAULT_TOKEN"
+}
+```
+
+The daemon reads it back on a rewrite (so `msg-gw rules push`/`Mutate` never
+drops one) but otherwise ignores it entirely — it has no effect on behaviour
+and can be omitted anywhere without consequence.
 
 ---
 
