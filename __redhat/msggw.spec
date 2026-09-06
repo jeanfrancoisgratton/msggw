@@ -55,6 +55,12 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Sep 05 2026 Binary package builder <builder@famillegratton.net> 0.11.1-1
+- feat: pairing now favours fallback method
+- chore: doc update
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- chore: update changelog for 0.11.0-1
+
 * Sat Sep 05 2026 Binary package builder <builder@famillegratton.net> 0.11.0-1
 - rc1 : testing container deployment
 - added a comment field in the config for documentation purposes
