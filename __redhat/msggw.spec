@@ -55,6 +55,16 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sat Sep 05 2026 Binary package builder <builder@famillegratton.net> 0.11.0-1
+- rc1 : testing container deployment
+- added a comment field in the config for documentation purposes
+- chore: version bump
+- chore: test alpinebuilder
+- dontexec
+- Merge branch 'develop'
+- chore: updated IDE settings
+- chore: update changelog for 0.10.0-1
+
 * Tue Sep 01 2026 Binary package builder <builder@famillegratton.net> 0.10.0-1
 - Merge branch 'develop'
 - added a token generator
