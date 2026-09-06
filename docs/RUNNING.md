@@ -130,14 +130,49 @@ see [`routing`](CONFIGURATION.md#routing) for the full set of destinations
 and rules.
 
 If any of your users will pair remotely instead of on this host (see
-[Remote pairing](#remote-pairing--client-mode) below), this is also where you
-enable the [`listener`](CONFIGURATION.md#listener) and set that user's
-`remote_pairing.token_ref`. The same applies if a user should be able to
+[Remote pairing](#remote-pairing--client-mode) below), or should be able to
 manage their own routing rules remotely (see [Remote rules
-management](#remote-rules-management--client-mode) below) — set their
-`remote_rules.token_ref` too, a separate token from `remote_pairing`'s.
-`msg-gw tokengen` generates these (see
-[CONFIGURATION.md § Client-mode pairing](CONFIGURATION.md#client-mode-pairing)).
+management](#remote-rules-management--client-mode) below), there's a bit more
+to set up here, in this order:
+
+1. Turn on the [`listener`](CONFIGURATION.md#listener) — set `listener.port`
+   to a non-zero value in `config.json`. TLS (`cert_file`/`key_file`) is
+   optional but strongly recommended, since pairing cookies and routing rules
+   both travel over this connection.
+2. Generate a token for each remote capability that user needs, with `msg-gw
+   tokengen`. Give it a destination and it writes the token straight there —
+   permissions locked down, never printed for you to lose track of:
+
+   ```bash
+   msg-gw tokengen file:/etc/msggw/secrets/jfgratton-pairing.token
+   msg-gw tokengen file:/etc/msggw/secrets/jfgratton-rules.token
+   ```
+
+   Run it once per capability, not once per user overall: `remote_pairing`
+   (re-pairing the phone) and `remote_rules` (editing routing) are
+   independently revocable on purpose, so they need two different tokens, not
+   one shared between them. Use `file:` (or `encoded:`) here rather than
+   `vault:`, even if the rest of your configuration uses Vault — this token is
+   handed to someone outside your infrastructure, and there's no reason to
+   also give them a route into your Vault server just to hold it.
+3. Point that user's entry at both files:
+
+   ```json
+   "remote_pairing": { "token_ref": "file:/etc/msggw/secrets/jfgratton-pairing.token" },
+   "remote_rules":    { "token_ref": "file:/etc/msggw/secrets/jfgratton-rules.token" }
+   ```
+
+4. Hand the two raw token values to that user, out of band — chat, a
+   password manager, anything other than plaintext email. `tokengen` never
+   prints the token itself once it's written to a file, so read it back once
+   yourself (`cat /etc/msggw/secrets/jfgratton-pairing.token`) to get the
+   value to send.
+
+Leaving either `token_ref` unset — or leaving out `remote_pairing`/
+`remote_rules` entirely — disables that one capability for that user; the
+corresponding endpoint then answers 403 instead of accepting a request. See
+[CONFIGURATION.md § Client-mode pairing](CONFIGURATION.md#client-mode-pairing)
+for the full field reference.
 
 Hand-writing the entry above is not the only way to get there: `msg-gw
 pair NAME --mattermost-user USERNAME` creates it for you the first time NAME

@@ -446,17 +446,21 @@ It needs two things configured:
 
    ```json
    "remote_pairing": {
-     "token_ref": "vault:secrets/msggw#jfgratton_pairing_token"
+     "token_ref": "file:/etc/msggw/secrets/jfgratton-pairing.token"
    }
    ```
 
    Generate the token yourself (anything unguessable — `openssl rand -hex 32`
    is fine, or `msg-gw tokengen`, which also saves it straight to a
    [secret reference](#secret-references) instead of printing it for you to
-   copy: `msg-gw tokengen vault:secrets/msggw#jfgratton_pairing_token`) and
-   hand it to that user out of band. Leaving `token_ref` unset, or empty,
-   disables remote pairing for that user: the endpoint answers 403 rather
-   than accepting an unauthenticated cookie handoff.
+   copy: `msg-gw tokengen file:/etc/msggw/secrets/jfgratton-pairing.token`) and
+   hand it to that user out of band. Prefer `file:`/`encoded:` over `vault:`
+   for this one even if the rest of your configuration uses Vault: this token
+   is handed to someone outside your infrastructure, and there's no reason to
+   also give them a route into your Vault server just to hold it. Leaving
+   `token_ref` unset, or empty, disables remote pairing for that user: the
+   endpoint answers 403 rather than accepting an unauthenticated cookie
+   handoff.
 
 With both in place, the operator runs the exact same `msg-gw pair` command
 they would locally, but on their own laptop or phone, with `--remote` and
@@ -498,14 +502,15 @@ listener setup as client-mode pairing, plus a **separate** per-user token:
 
 ```json
 "remote_rules": {
-  "token_ref": "vault:secrets/msggw#jfgratton_rules_token"
+  "token_ref": "file:/etc/msggw/secrets/jfgratton-rules.token"
 }
 ```
 
 This is deliberately not the same `token_ref` as `remote_pairing`: re-pairing
 a phone and editing one's own routing rules are different-blast-radius
 capabilities, independently grantable and revocable — generate it the same
-way, e.g. `msg-gw tokengen vault:secrets/msggw#jfgratton_rules_token`. Leaving
+way, e.g. `msg-gw tokengen file:/etc/msggw/secrets/jfgratton-rules.token`
+(same `file:`/`encoded:`-over-`vault:` reasoning as above). Leaving
 `token_ref` unset, or empty, disables remote rules management for that user,
 the same way an unset `remote_pairing.token_ref` disables remote pairing.
 
