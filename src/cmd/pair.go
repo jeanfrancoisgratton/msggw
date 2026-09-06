@@ -35,6 +35,7 @@ var (
 	pairEmail              string
 	pairMattermostServer   string
 	pairMattermostUser     string
+	pairNoProfileCookies   bool
 )
 
 var pairCmd = &cobra.Command{
@@ -59,10 +60,18 @@ Provisioning is local-only; it has no effect with --remote (see below), where
 the daemon's own configuration must already have NAME.
 
 Google killed QR-code device pairing, so this authenticates as your Google
-account instead. By default, pair opens a browser window for you to sign into
-that account — nothing to copy, nothing to configure. Once you're signed in,
-the window closes on its own and pairing continues. The daemon then shows an
-emoji; tap the matching one on Google Messages on the phone to confirm.
+account instead. Before doing anything visible, pair first checks whether a
+locally installed Chrome, Chromium, or Edge already has a signed-in Google
+Messages web session (the same one you'd get from just using Google Messages
+in your everyday browser) and reuses it silently if so — no window, no
+interaction. Pass --no-profile-cookies to skip that check and always open a
+browser instead (e.g. to sign into a different account than the one already
+cached).
+
+Failing that, pair opens a browser window for you to sign into that account —
+nothing to copy, nothing to configure. Once you're signed in, the window
+closes on its own and pairing continues. The daemon then shows an emoji; tap
+the matching one on Google Messages on the phone to confirm.
 
 If that window shows "Couldn't sign you in — This browser or app may not be
 secure," that's Google refusing to authenticate a browser driven over the
@@ -291,6 +300,12 @@ func resolveCookies(ctx context.Context, cmd *cobra.Command, out io.Writer) (map
 	case pairNoBrowser || !isInteractive(cmd):
 		return readCookiesStdin(cmd)
 	default:
+		if !pairNoProfileCookies {
+			if cookies, source, err := browserauth.ReadProfileCookies(ctx); err == nil {
+				fmt.Fprintf(out, "Found an existing signed-in Google Messages session in %s; reusing it instead of opening a browser.\n", source)
+				return cookies, nil
+			}
+		}
 		cookies, err := browserauth.CaptureCookies(ctx, out)
 		if err != nil {
 			return nil, err
@@ -387,4 +402,6 @@ func init() {
 		"checked against the configured mattermost.url as a sanity check")
 	pairCmd.Flags().StringVar(&pairMattermostUser, "mattermost-user", "",
 		"the Mattermost username NAME's messages default to (required to provision a new NAME)")
+	pairCmd.Flags().BoolVar(&pairNoProfileCookies, "no-profile-cookies", false,
+		"skip checking local browser profiles for an existing Google session before opening a browser")
 }

@@ -27,6 +27,7 @@ Android phone / Google Messages
 - [Status](#status)
 - [Building](#building)
 - [Using it](#using-it)
+- [Connecting your phone (for users)](#connecting-your-phone-for-users)
 - [Configuration](#configuration)
 - [Proposed solution](#proposed-solution)
   - [Objective](#objective)
@@ -117,20 +118,60 @@ A first run looks like this:
 msg-gw config sample > /etc/msggw/config.json
 $EDITOR /etc/msggw/config.json
 msg-gw config check
-msg-gw pair jfgratton --cookies-file cookies.json
+msg-gw pair jfgratton
 msg-gw daemon
 ```
 
 Google retired QR-code device pairing, so `pair` authenticates as your Google account instead.
-Sign into `messages.google.com/web` in a **private** browser window, copy the `SID`, `HSID`,
-`SSID`, `OSID`, `APISID` and `SAPISID` cookies (and `__Secure-1PSIDTS` if present) from devtools
-into a JSON file, and pass it with `--cookies-file` (or pipe the JSON to stdin). `pair` then
-shows an emoji; tapping the matching one on Google Messages on the phone confirms the pairing.
-Once confirmed, the daemon reconnects with the stored session and prints the conversation list,
-which is the phase-1 success criterion proving the session actually works.
+By default it first checks for an already signed-in Google Messages session in a local browser
+and reuses it silently if found — fully unattended, nothing to click. Failing that, it opens a
+browser window for you to sign in interactively. A manual-cookies fallback (`--cookies-file`, or
+piping JSON to stdin) also exists, for headless environments or if the browser sign-in is
+blocked. `pair` then shows an emoji; tapping the matching one on Google Messages on the phone
+confirms the pairing. Once confirmed, the daemon reconnects with the stored session and prints
+the conversation list, which is the phase-1 success criterion proving the session actually
+works. See [Connecting your phone](#connecting-your-phone-for-users) below for the
+plain-language version, or [docs/RUNNING.md](docs/RUNNING.md#setting-up-a-client-user) for the
+full walkthrough and troubleshooting.
 
 `status` reports what is on disk and, unless given `--offline`, checks that the Google session
 is still honoured and that the Mattermost token still authenticates.
+
+---
+
+## Connecting your phone (for users)
+
+*This section is for people whose texts will show up in Mattermost — you don't need to read
+anything else on this page to do this.*
+
+Someone else (the "operator") has already set up `msg-gw` and created a spot for you. Linking
+your phone to it is a single command, run once.
+
+1. Get two things from the operator: the exact command to run, and, if it's your first time,
+   your Mattermost username.
+2. Open a terminal and run the command. It looks like this, with your own name in place of
+   `yourname`:
+   ```bash
+   msg-gw pair yourname
+   ```
+3. **Most of the time, that's it — nothing else to do.** If you already use Google Messages in
+   your everyday web browser (Chrome, Edge, etc.), the command notices you're already signed in
+   and finishes on its own. No window pops up, nothing to click.
+4. If it *doesn't* find that, a browser window opens to Google's normal sign-in page. Sign in
+   exactly like you always do — nothing special. The window closes by itself once you're done.
+5. Open **Google Messages** on your phone. It'll show you an emoji — tap the matching one on
+   your screen. That's the last step; it proves it's really your phone.
+6. You'll see a short list of your conversations printed in the terminal — that means it
+   worked, and you're done.
+
+**If a browser window opens and Google shows "Couldn't sign you in — this browser or app may
+not be secure":** don't worry, nothing is wrong with your computer or your browser's settings.
+Google is deliberately refusing that particular kind of automated sign-in window. Tell the
+operator — there's a short manual workaround for this (a few extra minutes, done together) —
+see the fallback in [docs/RUNNING.md](docs/RUNNING.md#fallback-manual-cookies-headless--no-browser-environments).
+
+For more detail (running this against a server you don't have direct access to, for example),
+see [Setting up a client (user)](docs/RUNNING.md#setting-up-a-client-user) in docs/RUNNING.md.
 
 ---
 

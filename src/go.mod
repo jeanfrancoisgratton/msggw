@@ -3,6 +3,7 @@ module msggw
 go 1.27.1
 
 require (
+	github.com/browserutils/kooky v0.2.10
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/chromedp/chromedp v0.16.0
 	github.com/google/uuid v1.6.0
@@ -19,6 +20,8 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
+	github.com/browserutils/ese v0.0.0-20260314233042-37b6a03a93ce // indirect
+	github.com/browserutils/sqlite3 v0.0.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -31,7 +34,9 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/gonuts/binary v0.2.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -52,6 +57,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jwalton/gchalk v1.3.0 // indirect
 	github.com/jwalton/go-supportscolor v1.2.0 // indirect
+	github.com/keybase/go-keychain v0.0.1 // indirect
 	github.com/mattermost/go-i18n v1.11.1-0.20211013152124-5c415071e404 // indirect
 	github.com/mattermost/ldap v3.0.4+incompatible // indirect
 	github.com/mattermost/logr/v2 v2.0.22 // indirect
@@ -74,6 +80,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wiggin77/merror v1.0.5 // indirect
 	github.com/wiggin77/srslog v1.0.1 // indirect
+	github.com/zalando/go-keyring v0.2.7 // indirect
 	go.mau.fi/util v0.10.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.56.0 // indirect

@@ -27,6 +27,7 @@ the other: set up the daemon, then pair yourself as its one user.
   - [7. Keep it running](#7-keep-it-running)
   - [Reloading a running daemon](#reloading-a-running-daemon)
 - [Setting up a client (user)](#setting-up-a-client-user)
+  - [Preferred: reuse an already signed-in browser (no interaction needed)](#preferred-reuse-an-already-signed-in-browser-no-interaction-needed)
   - [Local pairing — you have shell access to the daemon's host](#local-pairing--you-have-shell-access-to-the-daemons-host)
   - [Remote pairing — client mode](#remote-pairing--client-mode)
   - [Remote rules management — client mode](#remote-rules-management--client-mode)
@@ -378,27 +379,51 @@ the `pair` command, run once per user, and the resulting session is what makes
 
 Either way, pairing needs a signed-in Google Messages web session — Google
 retired QR-code device pairing, so `pair` authenticates as your Google
-account instead. By default, `pair` handles that itself: it opens a browser
-window for you to sign into Google, watches for the sign-in to complete, and
-closes the window on its own once it has what it needs. There's nothing to
-copy, no devtools, no JSON file — just the one thing only you can do, which
-is proving it's your Google account.
+account instead. Read [Preferred: reuse an already signed-in
+browser](#preferred-reuse-an-already-signed-in-browser-no-interaction-needed)
+first — it's the default, requires no interaction when it applies, and needs
+no separate command; the walkthroughs below ([Local
+pairing](#local-pairing--you-have-shell-access-to-the-daemons-host) and
+[Remote pairing](#remote-pairing--client-mode)) both use it automatically.
 
-If a browser can't be opened — a headless server, an SSH-only box, a
-scripted pairing pipeline — there's still a way through. See [Fallback:
-manual cookies](#fallback-manual-cookies-headless--no-browser-environments)
-at the end of this section.
+### Preferred: reuse an already signed-in browser (no interaction needed)
 
-**If the browser window opens but Google immediately shows "Couldn't sign
-you in — This browser or app may not be secure,"** that message is not
-about a real setting on your end — JavaScript, cookies, and extensions are
-all irrelevant to it. `pair` drives the browser over the DevTools protocol
-so it can tell when you've finished signing in, and Google's sign-in page
-detects that and refuses to authenticate automated/remote-controlled
-browsers, full stop. There's no flag to fix this from `pair`'s side — use
-the [manual cookies
+This is the method `pair` always tries first, and it's the one to aim for:
+before opening anything, `pair` checks whether a locally installed Chrome,
+Chromium, or Edge already has a signed-in `https://messages.google.com`
+session — e.g. because you already use Google Messages in your everyday
+browser — and reuses it if so. No window opens, nothing to click, no sign-in
+screen to see. This is what makes pairing fully unattended when it applies: a
+provisioning script, a fresh machine where the account was already logged in
+once, or simply the common case of a person who already has Google Messages
+open in their browser.
+
+There's nothing to configure to get this — it's the default behavior of
+`msg-gw pair NAME`, below, for both local and remote (`--remote`) pairing.
+Pass `--no-profile-cookies` to skip this check and always fall through to an
+interactive browser sign-in instead (for example, to sign into a different
+account than the one already cached on this machine).
+
+If no local browser has a usable session, `pair` falls back to opening a
+browser window for you to sign in interactively — see the walkthroughs
+below. And if no browser is installed at all — a headless server, an
+SSH-only box, a scripted pairing pipeline — there's still a way through: see
+[Fallback: manual
+cookies](#fallback-manual-cookies-headless--no-browser-environments) at the
+end of this section. Signing in that way, even once, in your own regular
+browser also means the *next* `pair` run on that machine finds and reuses
+that session automatically, with no interaction at all.
+
+**If the interactive browser window opens but Google immediately shows
+"Couldn't sign you in — This browser or app may not be secure,"** that
+message is not about a real setting on your end — JavaScript, cookies, and
+extensions are all irrelevant to it. `pair` drives that browser over the
+DevTools protocol so it can tell when you've finished signing in, and
+Google's sign-in page detects that and refuses to authenticate
+automated/remote-controlled browsers, full stop. There's no flag to fix this
+from `pair`'s side — use the [manual cookies
 fallback](#fallback-manual-cookies-headless--no-browser-environments)
-instead, signing in from your own regular, non-automated browser.
+instead.
 
 Which of the two pairing modes below applies depends on whether you have
 shell access to the machine the daemon runs on.
@@ -425,9 +450,9 @@ msg-gw pair NAME --mattermost-user YOUR_MATTERMOST_USERNAME
 `status` to show later, never checked against the account you actually sign
 into below. Neither flag does anything once NAME already exists.
 
-Either way, a browser window opens to Google's sign-in page; sign in
-there as you normally would. Once you're signed in, the window closes and
-the command prints an emoji:
+`pair` then gets a session as described above — reused silently if possible,
+or via an interactive browser sign-in otherwise. Once it has one, the
+command prints an emoji:
 
 ```text
 On the phone, open Google Messages and tap this emoji when it's offered:
@@ -487,10 +512,12 @@ environment variable, instead of `--token-file`. `--insecure-skip-verify`
 skips TLS certificate verification, for testing against a self-signed
 listener only — don't use it against a real deployment.
 
-Just like local pairing, this opens a browser window for you to sign into
-Google — it happens right here, on this device, which is the whole point of
-client mode: the daemon's host never touches your Google account, only the
-resulting session material, sent over the network after you've signed in.
+Just like local pairing, this reuses an already signed-in session on this
+device if one exists, or opens a browser window for you to sign into Google
+otherwise — either way it happens right here, on this device, which is the
+whole point of client mode: the daemon's host never touches your Google
+account, only the resulting session material, sent over the network after
+you've signed in.
 
 The rest of the flow looks identical to local pairing: an emoji to tap on the
 phone, then a wait for confirmation. Behind the scenes, the daemon relays the
