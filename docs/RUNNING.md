@@ -389,6 +389,17 @@ scripted pairing pipeline — there's still a way through. See [Fallback:
 manual cookies](#fallback-manual-cookies-headless--no-browser-environments)
 at the end of this section.
 
+**If the browser window opens but Google immediately shows "Couldn't sign
+you in — This browser or app may not be secure,"** that message is not
+about a real setting on your end — JavaScript, cookies, and extensions are
+all irrelevant to it. `pair` drives the browser over the DevTools protocol
+so it can tell when you've finished signing in, and Google's sign-in page
+detects that and refuses to authenticate automated/remote-controlled
+browsers, full stop. There's no flag to fix this from `pair`'s side — use
+the [manual cookies
+fallback](#fallback-manual-cookies-headless--no-browser-environments)
+instead, signing in from your own regular, non-automated browser.
+
 Which of the two pairing modes below applies depends on whether you have
 shell access to the machine the daemon runs on.
 
@@ -592,9 +603,12 @@ up.
 ### Fallback: manual cookies (headless / no-browser environments)
 
 This is **not** the recommended way to pair — it exists for machines where
-`pair` can't open a browser at all: a headless server, an SSH-only box with
-no display, or a scripted/automated pairing pipeline. If you can run `pair`
-on a machine with a screen, use the default flow above instead.
+`pair` can't open a browser at all (a headless server, an SSH-only box with
+no display, a scripted/automated pairing pipeline), and for the case where
+a browser does open but Google refuses to let it sign in because `pair` is
+driving it via the DevTools protocol ("Couldn't sign you in — This browser
+or app may not be secure"). If you can run `pair` on a machine with a
+screen and don't hit that error, use the default flow above instead.
 
 The fallback supplies the same Google account cookies `pair` would otherwise
 capture for you, by hand:

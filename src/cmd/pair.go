@@ -64,6 +64,11 @@ that account — nothing to copy, nothing to configure. Once you're signed in,
 the window closes on its own and pairing continues. The daemon then shows an
 emoji; tap the matching one on Google Messages on the phone to confirm.
 
+If that window shows "Couldn't sign you in — This browser or app may not be
+secure," that's Google refusing to authenticate a browser driven over the
+DevTools protocol (how pair detects that you've signed in) — not a real
+setting to change. Use the manual cookies fallback below instead.
+
 Once paired, the session is stored under root_dir (see
 docs/CONFIGURATION.md#gmessages) and the daemon can reconnect without pairing
 again.
