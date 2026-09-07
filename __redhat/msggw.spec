@@ -55,6 +55,13 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Sun Sep 06 2026 Binary package builder <builder@famillegratton.net> 0.20.0-1
+- feat: new config dir search priority
+- misc fixes
+- -A
+- added another pairing fallback
+- chore: update changelog for 0.11.1-1
+
 * Sat Sep 05 2026 Binary package builder <builder@famillegratton.net> 0.11.1-1
 - feat: pairing now favours fallback method
 - chore: doc update
