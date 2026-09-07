@@ -575,3 +575,100 @@ func TestValidateRuleList(t *testing.T) {
 		t.Errorf("the error does not name the offending rule: %v", err)
 	}
 }
+
+// withStatFile swaps the package-level statFile seam for the duration of a
+// test, so discover()'s ordering can be exercised without touching the real
+// filesystem (in particular, without depending on whether /etc/msggw/
+// config.json happens to exist on whatever machine runs the test).
+func withStatFile(t *testing.T, exists map[string]bool) {
+	t.Helper()
+	prev := statFile
+	statFile = func(path string) (os.FileInfo, error) {
+		if exists[path] {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+	t.Cleanup(func() { statFile = prev })
+}
+
+func TestPerUserPathIgnoresXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	path, err := PerUserPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(home, ".config", "JFG", "msggw", "config.json")
+	if path != want {
+		t.Errorf("got %q, want %q (XDG_CONFIG_HOME must not affect this)", path, want)
+	}
+}
+
+func TestDiscoverPrefersPerUserPathOverDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	perUser, err := PerUserPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	withStatFile(t, map[string]bool{perUser: true, DefaultPath: true})
+
+	got, err := discover()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != perUser {
+		t.Errorf("got %q, want the per-user path %q to win", got, perUser)
+	}
+}
+
+func TestDiscoverFallsBackToDefaultPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	perUser, err := PerUserPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	withStatFile(t, map[string]bool{DefaultPath: true})
+
+	got, err := discover()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != DefaultPath {
+		t.Errorf("got %q, want DefaultPath %q (per-user path %q should not exist)", got, DefaultPath, perUser)
+	}
+}
+
+func TestDiscoverErrorsWhenNeitherPathExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	withStatFile(t, nil)
+
+	_, err := discover()
+	if err == nil {
+		t.Fatal("expected an error when neither the per-user nor the default path exists")
+	}
+	if !strings.Contains(err.Error(), DefaultPath) {
+		t.Errorf("error does not mention DefaultPath: %v", err)
+	}
+}
+
+func TestEnsurePerUserDirCreatesDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	EnsurePerUserDir()
+
+	want := filepath.Join(home, ".config", "JFG", "msggw")
+	info, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("directory was not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("%q exists but is not a directory", want)
+	}
+}

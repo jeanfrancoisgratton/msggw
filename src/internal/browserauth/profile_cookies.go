@@ -44,13 +44,23 @@ func wantedCookieNames() map[string]bool {
 	return names
 }
 
+// isGoogleDomain reports whether domain is google.com or a proper subdomain
+// of it (messages.google.com, accounts.google.com, ...). This has to check
+// the subdomain boundary explicitly — a plain strings.HasSuffix(domain,
+// "google.com") would also match unrelated domains like "evilgoogle.com" or
+// "notgoogle.com", since both literally end with that substring.
+func isGoogleDomain(domain string) bool {
+	domain = strings.TrimPrefix(domain, ".")
+	return domain == "google.com" || strings.HasSuffix(domain, ".google.com")
+}
+
 // readCookies is swapped out in tests so ReadProfileCookies's grouping and
 // validation logic can be exercised without touching real browser profiles
 // or an OS keyring.
 var readCookies = func(ctx context.Context) (kooky.Cookies, error) {
 	wanted := wantedCookieNames()
 	nameAndDomain := kooky.FilterFunc(func(c *kooky.Cookie) bool {
-		return wanted[c.Name] && strings.HasSuffix(strings.TrimPrefix(c.Domain, "."), "google.com")
+		return wanted[c.Name] && isGoogleDomain(c.Domain)
 	})
 	return kooky.ReadCookies(ctx, nameAndDomain, kooky.Valid)
 }

@@ -3,14 +3,18 @@
 `msg-gw` reads a single JSON file. It looks for it in this order:
 
 1. the path given to `--config` / `-c`;
-2. `/etc/msggw/config.json`;
-3. `$XDG_CONFIG_HOME/msggw/config.json` (usually `~/.config/msggw/config.json`).
+2. `~/.config/JFG/msggw/config.json` — a fixed, per-user path (deliberately
+   ignoring `XDG_CONFIG_HOME` and any other XDG variable, so it's the same on
+   every machine regardless of desktop environment); the directory is
+   created automatically on startup if it doesn't exist yet;
+3. `/etc/msggw/config.json`, the system-wide fallback.
 
-Print a starting point and check it:
+Print a starting point and check it — no root needed, since this writes to
+your own per-user location:
 
 ```bash
-msg-gw config sample > /etc/msggw/config.json
-$EDITOR /etc/msggw/config.json
+msg-gw config sample > ~/.config/JFG/msggw/config.json
+$EDITOR ~/.config/JFG/msggw/config.json
 msg-gw config check
 ```
 
@@ -380,7 +384,11 @@ pairing. On success, the session is written to the derived path
 
 For a headless server, an SSH-only box, or a scripted pairing pipeline where
 `pair` can't open a browser, a manual fallback exists: sign into
-`https://messages.google.com/web` yourself, open devtools, and copy the
+`https://messages.google.com/web` yourself, open devtools, and under its
+Cookies storage view pick the `https://messages.google.com` entry
+specifically (not `google.com` — `OSID` only lives under
+`messages.google.com`, and that entry also lists Google's account-wide
+cookies alongside it, so it's the one place with everything). Copy the
 `SID`, `HSID`, `SSID`, `OSID`, `APISID` and `SAPISID` cookies (and
 `__Secure-1PSIDTS` if present) into a JSON file:
 

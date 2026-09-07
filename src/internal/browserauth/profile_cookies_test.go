@@ -23,6 +23,27 @@ func (f fakeBrowser) Profile() string        { return f.profile }
 func (f fakeBrowser) IsDefaultProfile() bool { return f.isDefault }
 func (f fakeBrowser) FilePath() string       { return f.path }
 
+func TestIsGoogleDomain(t *testing.T) {
+	tests := []struct {
+		domain string
+		want   bool
+	}{
+		{"google.com", true},
+		{".google.com", true},
+		{"messages.google.com", true}, // where OSID actually lives
+		{"accounts.google.com", true},
+		{"evilgoogle.com", false},   // ends with "google.com" as a raw substring, but isn't a subdomain
+		{"notgoogle.com", false},    // same trap
+		{"google.com.evil.com", false},
+		{"example.com", false},
+	}
+	for _, tt := range tests {
+		if got := isGoogleDomain(tt.domain); got != tt.want {
+			t.Errorf("isGoogleDomain(%q) = %v, want %v", tt.domain, got, tt.want)
+		}
+	}
+}
+
 func fakeCookie(name, value string, b kooky.BrowserInfo) *kooky.Cookie {
 	return &kooky.Cookie{
 		Cookie:  http.Cookie{Name: name, Value: value, Domain: "google.com"},

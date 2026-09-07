@@ -646,7 +646,8 @@ design decisions, and nothing else.
 
 ### 6a. `internal/config`
 
-Reads `/etc/msggw/config.json`, decodes it into `Config`
+Reads `config.json` (`--config`, then `~/.config/JFG/msggw/`, then
+`/etc/msggw/`), decodes it into `Config`
 (`internal/config/types.go:37`), fills in defaults, and validates it —
 that's the whole job, stated explicitly in the package doc comment
 (`config.go:6`):
@@ -1123,7 +1124,7 @@ so the condition has to be rechecked in a loop, not assumed true just because
 
 | Path | What's there | Written by |
 |---|---|---|
-| `/etc/msggw/config.json` | your configuration | you |
+| `~/.config/JFG/msggw/config.json` or `/etc/msggw/config.json` | your configuration | you |
 | `/var/lib/msggw/msggw.db` (SQLite mode) | the mapping database | `internal/storage` |
 | a Postgres database (Postgres mode) | the same mapping tables | `internal/storage` |
 | `root_dir/gmessages/NAME_session.enc` | the Google Messages session | `SessionStore` (`gmessages/auth.go`) |

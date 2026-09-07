@@ -84,9 +84,12 @@ again.
 
 For environments where a browser can't be opened (a headless server, an
 SSH-only box, a scripted pairing pipeline), a manual fallback still exists:
-sign into https://messages.google.com/web yourself, open devtools, and copy
-the SID, HSID, SSID, OSID, APISID and SAPISID cookies (and __Secure-1PSIDTS if
-present) into a JSON file:
+sign into https://messages.google.com/web yourself, open devtools, and under
+Application/Storage → Cookies, pick the https://messages.google.com entry
+(not google.com — messages.google.com's cookie list already includes
+Google's account-wide cookies alongside its own, so this one place has
+everything). Copy the SID, HSID, SSID, OSID, APISID and SAPISID cookies (and
+__Secure-1PSIDTS if present) into a JSON file:
 
   {"SID": "...", "HSID": "...", "SSID": "...", "OSID": "...",
    "APISID": "...", "SAPISID": "...", "__Secure-1PSIDTS": "..."}

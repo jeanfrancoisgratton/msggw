@@ -79,11 +79,11 @@ itself.
 ### 3. Write the configuration
 
 `msg-gw` reads one JSON file, looked up at `--config`/`-c`, then
-`/etc/msggw/config.json`, then `$XDG_CONFIG_HOME/msggw/config.json`:
+`~/.config/JFG/msggw/config.json`, then `/etc/msggw/config.json`:
 
 ```bash
-msg-gw config sample > /etc/msggw/config.json
-$EDITOR /etc/msggw/config.json
+msg-gw config sample > ~/.config/JFG/msggw/config.json
+$EDITOR ~/.config/JFG/msggw/config.json
 ```
 
 At minimum, fill in:
@@ -214,7 +214,7 @@ than by convention:
 
 - They write straight to **whichever `config.json` is currently active** —
   the same file `config.Load` resolves at startup (`--config`/`-c`, then
-  `/etc/msggw/config.json`, then `$XDG_CONFIG_HOME/msggw/config.json`). Run
+  `~/.config/JFG/msggw/config.json`, then `/etc/msggw/config.json`). Run
   `rules` with the same `--config` the daemon uses (or from the same host, if
   you rely on the default paths) and there is no separate "server copy" to
   keep in sync — it's the one file.
@@ -642,7 +642,13 @@ capture for you, by hand:
 
 1. Sign into `https://messages.google.com/web` in a **private** browser
    window, on any device — it doesn't need to be the machine `pair` runs on.
-2. Open devtools and copy the `SID`, `HSID`, `SSID`, `OSID`, `APISID` and
+2. Open devtools' **Application** tab (Chrome/Edge) or **Storage** tab
+   (Firefox), go to Cookies, and pick the **`https://messages.google.com`**
+   entry specifically — not `google.com`. Google's account-wide cookies
+   (`SID`, `HSID`, etc.) get listed there too alongside `OSID`, which only
+   ever lives under `messages.google.com`, so this one entry has everything
+   you need; checking `google.com` separately isn't necessary and won't have
+   `OSID` at all. Copy the `SID`, `HSID`, `SSID`, `OSID`, `APISID` and
    `SAPISID` cookies (and `__Secure-1PSIDTS`, if present) into a JSON file:
 
    ```json

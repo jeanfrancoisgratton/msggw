@@ -103,6 +103,14 @@ func CaptureCookies(ctx context.Context, out io.Writer) (map[string]string, erro
 	}
 }
 
+// cookieCaptureURLs is where pollCookies looks for Google account cookies.
+// messages.google.com is load-bearing, not redundant with google.com: OSID
+// (one of gmessages.RequiredCookies) is scoped specifically to
+// messages.google.com and never appears under google.com — see
+// gmessages.RequiredCookies and mautrix-gmessages' own
+// pkg/connector/login.go, which documents the same domain split.
+var cookieCaptureURLs = []string{"https://google.com", "https://messages.google.com"}
+
 // pollCookies reads whatever Google account cookies the browser currently
 // holds for google.com and its messages.google.com subdomain.
 func pollCookies(ctx context.Context) (map[string]string, error) {
@@ -110,7 +118,7 @@ func pollCookies(ctx context.Context) (map[string]string, error) {
 	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		var err error
 		raw, err = network.GetCookies().
-			WithURLs([]string{"https://google.com", "https://messages.google.com"}).
+			WithURLs(cookieCaptureURLs).
 			Do(ctx)
 		return err
 	}))

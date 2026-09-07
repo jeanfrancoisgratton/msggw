@@ -11,5 +11,5 @@ import _ "embed"
 var sample string
 
 // Sample returns a commented-by-example configuration file, for
-// "msg-gw config sample > /etc/msggw/config.json".
+// "msg-gw config sample > ~/.config/JFG/msggw/config.json".
 func Sample() string { return sample }

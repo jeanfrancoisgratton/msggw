@@ -7,8 +7,10 @@ package main
 
 import (
 	"msggw/cmd"
+	"msggw/internal/config"
 )
 
 func main() {
+	config.EnsurePerUserDir()
 	cmd.Execute()
 }

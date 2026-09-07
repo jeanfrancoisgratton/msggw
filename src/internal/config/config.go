@@ -24,21 +24,67 @@ import (
 	"msggw/internal/secrets"
 )
 
-// DefaultPath is where the daemon looks when no --config is given.
+// DefaultPath is the system-wide configuration location, used when no
+// per-user configuration exists.
 const DefaultPath = "/etc/msggw/config.json"
 
-// UserPath is the per-user fallback, used when DefaultPath does not exist.
-// It lets the daemon run unprivileged without an /etc entry.
-func UserPath() string {
-	dir, err := os.UserConfigDir()
+// PerUserPath is msggw's per-user configuration location, checked before
+// DefaultPath — so an unprivileged user with their own config.json never
+// needs /etc access at all. It deliberately ignores XDG_CONFIG_HOME and
+// every other XDG variable in favor of a single fixed path (~/.config/JFG),
+// the same on every machine for a given user: the point is that
+// "msg-gw config sample > ..."-style bootstrapping (see EnsurePerUserDir)
+// works identically regardless of what the user's desktop environment
+// happens to set, which matters most for people who would never think to
+// set XDG_CONFIG_HOME in the first place.
+func PerUserPath() (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("resolving the current user's home directory: %w", err)
 	}
-	return filepath.Join(dir, "msggw", "config.json")
+	return filepath.Join(home, ".config", "JFG", "msggw", "config.json"), nil
+}
+
+// EnsurePerUserDir best-effort creates the directory PerUserPath lives in, so
+// a brand-new user can write their first config.json into it (e.g.
+// "msg-gw config sample > ~/.config/JFG/msggw/config.json") without first
+// needing to mkdir -p by hand. Failure here is never fatal on its own: every
+// command that actually needs the directory to exist surfaces its own clear
+// error if it still doesn't (e.g. a shell redirect failing, or discover()
+// falling through to DefaultPath).
+func EnsurePerUserDir() {
+	path, err := PerUserPath()
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0700)
+}
+
+// statFile is swapped out in tests so discover()'s ordering can be exercised
+// without touching the real filesystem.
+var statFile = os.Stat
+
+// discover finds the configuration to load when no --config was given: the
+// per-user path first, falling back to the system-wide DefaultPath.
+func discover() (string, error) {
+	perUser, perUserErr := PerUserPath()
+	if perUserErr == nil {
+		if _, err := statFile(perUser); err == nil {
+			return perUser, nil
+		}
+	}
+	if _, err := statFile(DefaultPath); err == nil {
+		return DefaultPath, nil
+	}
+	if perUserErr != nil {
+		return "", fmt.Errorf("no configuration found at %s (and the per-user path could not be resolved: %v; see --config)", DefaultPath, perUserErr)
+	}
+	return "", fmt.Errorf("no configuration found at %s or %s (see --config)", perUser, DefaultPath)
 }
 
 // Load reads the configuration from path, applies defaults and validates it.
-// An empty path means DefaultPath, falling back to UserPath.
+// An empty path means the discovered default: PerUserPath first, falling
+// back to DefaultPath.
 func Load(path string) (*Config, error) {
 	if path == "" {
 		var err error
@@ -67,19 +113,6 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("configuration %s: %w", path, err)
 	}
 	return &cfg, nil
-}
-
-func discover() (string, error) {
-	if _, err := os.Stat(DefaultPath); err == nil {
-		return DefaultPath, nil
-	}
-	if userPath := UserPath(); userPath != "" {
-		if _, err := os.Stat(userPath); err == nil {
-			return userPath, nil
-		}
-		return "", fmt.Errorf("no configuration found at %s or %s (see --config)", DefaultPath, userPath)
-	}
-	return "", fmt.Errorf("no configuration found at %s (see --config)", DefaultPath)
 }
 
 // Path returns the file this configuration was read from.

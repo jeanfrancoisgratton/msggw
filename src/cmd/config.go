@@ -25,7 +25,7 @@ var configSampleCmd = &cobra.Command{
 	Short: "Print a sample configuration file",
 	Long: `Print a sample configuration file on standard output.
 
-  msg-gw config sample > /etc/msggw/config.json`,
+  msg-gw config sample > ~/.config/JFG/msggw/config.json`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, err := fmt.Fprint(cmd.OutOrStdout(), config.Sample())

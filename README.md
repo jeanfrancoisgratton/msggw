@@ -112,11 +112,12 @@ remote pairing does. Both are covered in [docs/RUNNING.md](docs/RUNNING.md).
 `NAME` matches a `name` entry under `users` in the configuration — one per
 paired phone. A single-person deployment just has one entry.
 
-A first run looks like this:
+A first run looks like this — no root needed, since it writes to your own
+per-user config location:
 
 ```bash
-msg-gw config sample > /etc/msggw/config.json
-$EDITOR /etc/msggw/config.json
+msg-gw config sample > ~/.config/JFG/msggw/config.json
+$EDITOR ~/.config/JFG/msggw/config.json
 msg-gw config check
 msg-gw pair jfgratton
 msg-gw daemon
@@ -177,8 +178,8 @@ see [Setting up a client (user)](docs/RUNNING.md#setting-up-a-client-user) in do
 
 ## Configuration
 
-One JSON file, looked up at `--config`, then `/etc/msggw/config.json`, then
-`$XDG_CONFIG_HOME/msggw/config.json`. Full reference:
+One JSON file, looked up at `--config`, then `~/.config/JFG/msggw/config.json`,
+then `/etc/msggw/config.json`. Full reference:
 **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 
 Three parts are worth knowing about up front.

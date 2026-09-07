@@ -30,10 +30,11 @@ Mattermost back out through Google Messages.
 The daemon pairs with the phone the same way Google Messages for Web does, so
 it carries real RCS traffic rather than downgrading messages to SMS.
 
-Getting started:
+Getting started (no root needed — this writes to your own
+~/.config/JFG/msggw/config.json):
 
-  message-gateway config sample > /etc/msggw/config.json
-  $EDITOR /etc/msggw/config.json
+  message-gateway config sample > ~/.config/JFG/msggw/config.json
+  $EDITOR ~/.config/JFG/msggw/config.json
   message-gateway config check
   message-gateway pair
   message-gateway daemon`,
@@ -43,7 +44,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the software version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(hftx.White("msg-gw 0.11.1 (2026.09.05), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+		fmt.Println(hftx.White("msg-gw 0.20.0 (2026.09.06), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
 	},
 }
 
@@ -59,7 +60,7 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "",
-		"configuration file (default /etc/msggw/config.json, then $XDG_CONFIG_HOME/msggw/config.json)")
+		"configuration file (default ~/.config/JFG/msggw/config.json, then /etc/msggw/config.json)")
 
 	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, reloadCmd, statusCmd, logoutCmd, rulesCmd, tokengenCmd, versionCmd)
 }
