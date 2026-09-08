@@ -44,7 +44,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the software version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(hftx.White("msg-gw 0.20.0 (2026.09.06), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+		fmt.Println(hftx.White("msg-gw 0.21.0 (2026.09.07), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
 	},
 }
 

@@ -1,5 +1,6 @@
 | Release | Date        | Comments                                                                                                                                                             |
 |---------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+} 0.21.0  | 2026.09.06  | New spin for the container  |
 | 0.10.0  | 2026.09.01  | Added `tokengen` helper facilities                                                                                                                                   |                                                                                                                                  |
 | 0.9.0   | 2026.09.01  | Self-service routing rules (`msg-gw rules pull/push --remote`); persistent listener survives reloads; automatic rollback on a failed reload; near-prod version bump. |
 | 0.7.1   | 2026.08.30  | Completed pairing, windows build dry run                                                                                                                             |
