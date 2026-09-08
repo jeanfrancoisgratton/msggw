@@ -32,7 +32,7 @@ DEB       := $(CURDIR)/$(STAGING).deb
 build:
 	rm -rf "$(STAGING)"
 	install -d "$(STAGING)/DEBIAN" "$(STAGING)/opt/sbin" "$(STAGING)/usr/share/doc/$(NAME)"
-	cp control preinst prerm postinst postrm "$(STAGING)/DEBIAN/"
+	cp control "$(STAGING)/DEBIAN/"
 	# copyright is documentation, not a control file: policy puts it at
 	# /usr/share/doc/<package>/copyright, and it must be 0644 there.
 	install -m 0644 copyright "$(STAGING)/usr/share/doc/$(NAME)/copyright"

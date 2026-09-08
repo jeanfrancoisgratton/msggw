@@ -32,8 +32,8 @@ func TestIsGoogleDomain(t *testing.T) {
 		{".google.com", true},
 		{"messages.google.com", true}, // where OSID actually lives
 		{"accounts.google.com", true},
-		{"evilgoogle.com", false},   // ends with "google.com" as a raw substring, but isn't a subdomain
-		{"notgoogle.com", false},    // same trap
+		{"evilgoogle.com", false}, // ends with "google.com" as a raw substring, but isn't a subdomain
+		{"notgoogle.com", false},  // same trap
 		{"google.com.evil.com", false},
 		{"example.com", false},
 	}

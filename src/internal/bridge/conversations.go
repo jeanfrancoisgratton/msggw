@@ -78,9 +78,7 @@ func (b *Bridge) ensureConversation(ctx context.Context, conversationID string) 
 		"destination", destination.String(), "channel_id", channelID,
 		"root_post", stored.RootPostID)
 
-	if count := b.user.GMessages.BackfillCount; count > 0 {
-		b.backfill(ctx, stored, count)
-	}
+	b.backfill(ctx, stored)
 
 	return stored, nil
 }
@@ -137,14 +135,37 @@ func (b *Bridge) handleConversationUpdate(ctx context.Context, conv gmessages.Co
 
 // backfill posts the tail of a conversation's history when it is first
 // bridged, oldest first so the thread reads in order.
-func (b *Bridge) backfill(ctx context.Context, stored storage.Conversation, count int) {
-	messages, err := b.gm.FetchMessages(ctx, stored.ID, count)
+//
+// The day-based window (GMessagesConfig.BackfillDays) takes priority: it is
+// what a deployment gets by default, and the count-based one
+// (GMessagesConfig.BackfillCount) only runs when days is explicitly disabled
+// (0). Both at 0 means no backfill at all.
+func (b *Bridge) backfill(ctx context.Context, stored storage.Conversation) {
+	gm := b.user.GMessages
+
+	var (
+		messages []gmessages.Message
+		err      error
+		window   string
+	)
+	switch {
+	case gm.BackfillDaysCount() > 0:
+		days := gm.BackfillDaysCount()
+		messages, err = b.gm.FetchMessagesSince(ctx, stored.ID, time.Now().AddDate(0, 0, -days))
+		window = fmt.Sprintf("%d day(s)", days)
+	case gm.BackfillCount > 0:
+		messages, err = b.gm.FetchMessages(ctx, stored.ID, gm.BackfillCount)
+		window = fmt.Sprintf("%d message(s)", gm.BackfillCount)
+	default:
+		return
+	}
 	if err != nil {
-		b.log.Warn("could not backfill a conversation", "conversation", stored.ID, "error", err)
+		b.log.Warn("could not backfill a conversation", "conversation", stored.ID, "window", window, "error", err)
 		return
 	}
 
-	// FetchMessages returns newest first.
+	// Both FetchMessages and FetchMessagesSince return newest first.
+	posted := 0
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		if !msg.HasContent() {
@@ -155,8 +176,9 @@ func (b *Bridge) backfill(ctx context.Context, stored storage.Conversation, coun
 				"conversation", stored.ID, "message", msg.ID, "error", err)
 			return
 		}
+		posted++
 	}
-	b.log.Info("backfilled a conversation", "conversation", stored.ID, "messages", len(messages))
+	b.log.Info("backfilled a conversation", "conversation", stored.ID, "window", window, "messages", posted)
 }
 
 // conversationHeader is the text of the root post that stands for a

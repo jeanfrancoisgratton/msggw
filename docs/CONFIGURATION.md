@@ -342,10 +342,11 @@ does not stop any other user's bridge, or the daemon as a whole.
 
 A `users[]` entry does not have to be written by hand: `msg-gw pair NAME
 --mattermost-user USERNAME` creates one the first time `NAME` is paired
-(routed to a direct message with `USERNAME`), and `msg-gw rules add/remove
-NAME` (see [Rules](#rules)) manages `routing.rules` on an existing one — both
-go through the same validated, atomic write as hand-editing this file plus
-`msg-gw config check`.
+(routed to a direct message with `USERNAME`), `msg-gw rules add/remove NAME`
+(see [Rules](#rules)) manages `routing.rules` on an existing one, and
+`msg-gw backfill NAME` (see [`gmessages`](#gmessages)) manages
+`backfill_days`/`backfill_count` on one — all three go through the same
+validated, atomic write as hand-editing this file plus `msg-gw config check`.
 
 ### `gmessages`
 
@@ -359,7 +360,8 @@ collide with another user's session.
 | `ping_interval_seconds` | int | `60` | How often to ping the phone. `libgm` ignores anything outside 60–14400. |
 | `force_rcs` | bool | `false` | Ask the phone to send over RCS rather than latching to SMS. Only applied to conversations that are already RCS and not latched. |
 | `mark_read_on_bridge` | bool | `false` | Mark a conversation read on the phone once its message reaches Mattermost. Off by default because it also silences the phone's own notifications. |
-| `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged. `0` disables backfill. |
+| `backfill_days` | int | `7` | How many days of history to post when a conversation is first bridged. `0` disables day-based backfill, in which case `backfill_count` is used instead. |
+| `backfill_count` | int | `0` | How many recent messages to post when a conversation is first bridged, regardless of age. Only consulted when `backfill_days` resolves to `0`; ignored otherwise. `0` disables it too — with both at `0`, a newly bridged conversation starts empty. |
 | `google_account` | string | — | The Google account this user is expected to pair with, as recorded by `msg-gw pair --email` when it provisions a new user (see [`users`](#users)). Documentation only — never resolved or checked against the account actually signed into during pairing. |
 
 ### Pairing

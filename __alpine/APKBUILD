@@ -1,15 +1,15 @@
 # Maintainer: J.F. Gratton <jean-francois@famillegratton.net>
 # Packager: Package builder <builder@famillegratton.net>
 pkgname=msggw
-pkgver=0.21.0
-pkgrel=2
+pkgver=0.30.0
+pkgrel=1
 pkgdir=/data/packages
 pkgdesc="Messages <-> Mattermost bridge"
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
 arch=x86_64
 license="GPL-3.0-or-later"
 #depends="gcompat"
-install="$pkgname.pre-install $pkgname.post-install $pkgname.pre-upgrade $pkgname.post-upgrade $pkgname.pre-deinstall $pkgname.post-deinstall"
+#install="$pkgname.pre-install $pkgname.post-install $pkgname.pre-upgrade $pkgname.post-upgrade $pkgname.pre-deinstall $pkgname.post-deinstall"
 #source="$pkgname-$pkgver-$pkgrel.tar.bz2::http://localhost/$pkgname-$pkgver-$pkgrel.tar.bz2"
 builddir="$startdir/src/BUILD"
 

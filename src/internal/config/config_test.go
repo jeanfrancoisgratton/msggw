@@ -80,8 +80,40 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if !cfg.Users[0].Routing.ThreadPerConversationEnabled() {
 		t.Error("thread_per_conversation should default to on")
 	}
+	if got := cfg.Users[0].GMessages.BackfillDaysCount(); got != DefaultBackfillDays {
+		t.Errorf("BackfillDaysCount() = %d, want the documented default %d", got, DefaultBackfillDays)
+	}
 	if cfg.RequestTimeout() == 0 || cfg.ReconnectBackoff() == 0 {
 		t.Error("the Mattermost timeouts should have non-zero defaults")
+	}
+}
+
+// TestBackfillDaysExplicitZeroDisables covers the tri-state: unset defaults to
+// DefaultBackfillDays (above), but an explicit 0 must stay 0 rather than being
+// mistaken for "unset" and defaulted anyway.
+func TestBackfillDaysExplicitZeroDisables(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"routing":`,
+		`"gmessages": {"backfill_days": 0}, "routing":`, 1)
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Users[0].GMessages.BackfillDaysCount(); got != 0 {
+		t.Errorf("BackfillDaysCount() = %d, want 0 (explicitly disabled)", got)
+	}
+}
+
+// TestBackfillDaysExplicitValueIsKept covers the third state: a non-zero
+// value the operator wrote is preserved, not overridden by the default.
+func TestBackfillDaysExplicitValueIsKept(t *testing.T) {
+	body := strings.Replace(minimalConfig, `"routing":`,
+		`"gmessages": {"backfill_days": 30}, "routing":`, 1)
+	cfg, err := Load(writeConfig(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Users[0].GMessages.BackfillDaysCount(); got != 30 {
+		t.Errorf("BackfillDaysCount() = %d, want 30", got)
 	}
 }
 

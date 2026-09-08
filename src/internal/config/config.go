@@ -154,6 +154,10 @@ func (c *Config) applyDefaults() {
 			enabled := true
 			c.Users[i].Routing.ThreadPerConversation = &enabled
 		}
+		if c.Users[i].GMessages.BackfillDays == nil {
+			days := DefaultBackfillDays
+			c.Users[i].GMessages.BackfillDays = &days
+		}
 	}
 }
 

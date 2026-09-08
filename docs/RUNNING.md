@@ -23,8 +23,9 @@ the other: set up the daemon, then pair yourself as its one user.
   - [3. Write the configuration](#3-write-the-configuration)
   - [4. Add one `users[]` entry per person](#4-add-one-users-entry-per-person)
   - [5. Add, edit and remove routing rules](#5-add-edit-and-remove-routing-rules)
-  - [6. Validate and run](#6-validate-and-run)
-  - [7. Keep it running](#7-keep-it-running)
+  - [6. Backfill history on first bridge](#6-backfill-history-on-first-bridge)
+  - [7. Validate and run](#7-validate-and-run)
+  - [8. Keep it running](#8-keep-it-running)
   - [Reloading a running daemon](#reloading-a-running-daemon)
 - [Setting up a client (user)](#setting-up-a-client-user)
   - [Preferred: reuse an already signed-in browser (no interaction needed)](#preferred-reuse-an-already-signed-in-browser-no-interaction-needed)
@@ -239,7 +240,49 @@ See [`routing`](CONFIGURATION.md#routing) for the full field reference and
 matching semantics, and `msg-gw rules --help` / `msg-gw rules add --help` for
 the complete flag list.
 
-### 6. Validate and run
+### 6. Backfill history on first bridge
+
+By default, the first time each conversation is bridged, `msg-gw` also posts
+its last 7 days of history — so messages your phone received before the
+daemon went live still show up in Mattermost, not just ones from that point
+on. `msg-gw backfill` changes this per user without hand-editing
+`config.json`:
+
+```bash
+msg-gw backfill jfgratton --days 14
+```
+
+- `--days N` sets the window in days (the default is 7; `0` turns day-based
+  backfill off entirely).
+- `--count N` sets an alternative, count-based window — the last `N`
+  messages regardless of age — but it only takes effect when `--days`
+  resolves to `0`; otherwise it is ignored. `0` disables it too, so leaving
+  both at `0` means a newly bridged conversation starts empty, exactly like
+  the daemon's behaviour before this setting existed.
+- Only the flag(s) you pass are changed; leave one out and its current value
+  is kept.
+
+This only affects conversations bridged **after** the change — like routing
+rules, it is a good one to get right before a conversation shows up for the
+first time, not something to reload for on every edit. And it is not free:
+backfilling posts every fetched message (and re-uploads every attachment on
+it) synchronously, before the bridge handles anything else, so a wide window
+or a media-heavy conversation will visibly stall live message delivery the
+first time it runs. It also does not carry the original send time into
+Mattermost — every backfilled post is timestamped when it was posted, not
+when the phone originally received it — so a thread reads in the right order
+but its Mattermost timestamps will all cluster around when backfill ran.
+
+Same guarantees as `msg-gw rules`: the change is written straight to
+whichever `config.json` is currently active, validated exactly as `msg-gw
+config check` validates it, and only committed once the result loads
+cleanly — but the running daemon does not pick it up until it is reloaded
+(see [Reloading a running daemon](#reloading-a-running-daemon)).
+
+See [`gmessages`](CONFIGURATION.md#gmessages) for the full field reference
+and `msg-gw backfill --help` for the complete flag list.
+
+### 7. Validate and run
 
 ```bash
 msg-gw config check
@@ -259,7 +302,7 @@ No user needs to be paired before the daemon starts — see [Setting up a
 client (user)](#setting-up-a-client-user) for that step, which can happen
 before, during, or after the daemon is running.
 
-### 7. Keep it running
+### 8. Keep it running
 
 There's no shipped systemd unit yet, but a minimal one is enough to get
 started:

@@ -7,7 +7,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/chromedp/chromedp v0.16.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jeanfrancoisgratton/helperFunctions/v5 v5.4.0
 	github.com/jeanfrancoisgratton/vaultlib/v2 v2.1.0
 	github.com/mattermost/mattermost/server/public v0.4.4
@@ -80,7 +80,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wiggin77/merror v1.0.5 // indirect
 	github.com/wiggin77/srslog v1.0.1 // indirect
-	github.com/zalando/go-keyring v0.2.7 // indirect
+	github.com/zalando/go-keyring v0.2.8 // indirect
 	go.mau.fi/util v0.10.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.56.0 // indirect

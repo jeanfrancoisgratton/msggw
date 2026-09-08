@@ -43,6 +43,7 @@
         "ping_interval_seconds": 60,
         "force_rcs": true,
         "mark_read_on_bridge": false,
+        "backfill_days": 7,
         "backfill_count": 0
       },
       "remote_pairing": {

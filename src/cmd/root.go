@@ -62,5 +62,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "",
 		"configuration file (default ~/.config/JFG/msggw/config.json, then /etc/msggw/config.json)")
 
-	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, reloadCmd, statusCmd, logoutCmd, rulesCmd, tokengenCmd, versionCmd)
+	rootCmd.AddCommand(completionCmd, configCmd, pairCmd, daemonCmd, reloadCmd, statusCmd, logoutCmd, rulesCmd, backfillCmd, tokengenCmd, versionCmd)
 }

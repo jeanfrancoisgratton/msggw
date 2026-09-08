@@ -181,6 +181,10 @@ type LogConfig struct {
 	Format string `json:"format,omitempty"`
 }
 
+// DefaultBackfillDays is what GMessagesConfig.BackfillDays defaults to when
+// left unset in config.json.
+const DefaultBackfillDays = 7
+
 // GMessagesConfig covers the Google Messages side of the bridge.
 type GMessagesConfig struct {
 	// Comment is documentation only; see Config.Comment.
@@ -200,8 +204,25 @@ type GMessagesConfig struct {
 	// notifications disappear, which is not always wanted.
 	MarkReadOnBridge bool `json:"mark_read_on_bridge,omitempty"`
 
-	// BackfillCount is how many recent messages to fetch for a conversation the
-	// first time it is bridged. 0 disables backfill.
+	// BackfillDays is how many days of history to fetch for a conversation the
+	// first time it is bridged, walking back through the phone's message
+	// history page by page until a message older than the window turns up.
+	// Nil (unset in config.json) defaults to DefaultBackfillDays; an explicit
+	// 0 disables day-based backfill outright, in which case BackfillCount is
+	// used instead. Only meaningful the first time a conversation is bridged
+	// — see BackfillCount for the shared caveats.
+	BackfillDays *int `json:"backfill_days,omitempty"`
+
+	// BackfillCount is how many recent messages to fetch for a conversation
+	// the first time it is bridged, regardless of how old they are. Only
+	// consulted when BackfillDays resolves to 0 (disabled); ignored
+	// otherwise. 0 disables it too — with both settings at 0, a newly bridged
+	// conversation starts empty.
+	//
+	// Either form of backfill posts everything it fetches — including
+	// attachments — synchronously, before the bridge handles anything else,
+	// so a wide window or a long count on a conversation with a lot of media
+	// will visibly stall live traffic the first time it runs.
 	BackfillCount int `json:"backfill_count,omitempty"`
 
 	// GoogleAccount is the email address of the Google account this user is
@@ -212,6 +233,16 @@ type GMessagesConfig struct {
 	// this just gives an operator managing several tenants a record of which
 	// one each was supposed to be.
 	GoogleAccount string `json:"google_account,omitempty"`
+}
+
+// BackfillDaysCount reads BackfillDays after defaults have been applied (nil
+// only before Config.Load runs applyDefaults, when it falls back to the same
+// DefaultBackfillDays applyDefaults would set).
+func (g GMessagesConfig) BackfillDaysCount() int {
+	if g.BackfillDays == nil {
+		return DefaultBackfillDays
+	}
+	return *g.BackfillDays
 }
 
 // MattermostConfig covers the Mattermost side of the bridge.

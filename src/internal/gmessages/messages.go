@@ -8,6 +8,7 @@ package gmessages
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
@@ -45,7 +46,8 @@ func (c *Client) GetConversation(ctx context.Context, id string) (Conversation, 
 }
 
 // FetchMessages returns the most recent count messages of a conversation,
-// newest first. It backs the optional backfill of a newly bridged thread.
+// newest first. It backs the count-based backfill of a newly bridged thread
+// (GMessagesConfig.BackfillCount); FetchMessagesSince backs the day-based one.
 func (c *Client) FetchMessages(ctx context.Context, conversationID string, count int) ([]Message, error) {
 	resp, err := c.gm.FetchMessages(ctx, conversationID, int64(count), nil)
 	if err != nil {
@@ -58,6 +60,65 @@ func (c *Client) FetchMessages(ctx context.Context, conversationID string, count
 		out = append(out, convertMessage(raw, true, conv))
 	}
 	return out, nil
+}
+
+// backfillPageSize is how many messages FetchMessagesSince asks for per page
+// while it walks back through a conversation's history looking for cutoff.
+const backfillPageSize = 50
+
+// FetchMessagesSince returns every message of a conversation newer than
+// cutoff, newest first, paginating through the phone's history via its
+// cursor until it finds a message older than cutoff or runs out of history.
+// It backs the day-based backfill of a newly bridged thread
+// (GMessagesConfig.BackfillDays).
+func (c *Client) FetchMessagesSince(ctx context.Context, conversationID string, cutoff time.Time) ([]Message, error) {
+	conv, _ := c.conversation(conversationID)
+
+	var out []Message
+	var cursor *gmproto.Cursor
+	for {
+		resp, err := c.gm.FetchMessages(ctx, conversationID, backfillPageSize, cursor)
+		if err != nil {
+			return nil, fmt.Errorf("fetching messages of %s: %w", conversationID, err)
+		}
+
+		raws := resp.GetMessages()
+		if len(raws) == 0 {
+			return out, nil
+		}
+		page := make([]Message, 0, len(raws))
+		for _, raw := range raws {
+			page = append(page, convertMessage(raw, true, conv))
+		}
+
+		kept, full := messagesAfter(page, cutoff)
+		out = append(out, kept...)
+		if !full {
+			// The page held a message older than cutoff: everything past it,
+			// and every later page, is out of the window.
+			return out, nil
+		}
+
+		cursor = resp.GetCursor()
+		if cursor == nil {
+			// No more history, and every message seen so far was still
+			// within the window.
+			return out, nil
+		}
+	}
+}
+
+// messagesAfter returns the prefix of messages (newest first) that are at or
+// after cutoff, and reports whether every message in the page qualified —
+// meaning the caller should keep paginating to find out whether an earlier
+// page holds one that doesn't.
+func messagesAfter(messages []Message, cutoff time.Time) (kept []Message, full bool) {
+	for i, msg := range messages {
+		if msg.Timestamp.Before(cutoff) {
+			return messages[:i], false
+		}
+	}
+	return messages, true
 }
 
 // SendResult reports what happened to an outgoing message.
