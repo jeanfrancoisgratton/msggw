@@ -55,6 +55,11 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Tue Sep 08 2026 Binary package builder <builder@famillegratton.net> 0.30.0-1
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- feat: backfill_count
+- chore: update changelog for 0.21.0-1
+
 * Mon Sep 07 2026 Binary package builder <builder@famillegratton.net> 0.21.0-1
 - Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
 - Version bump to test the container
