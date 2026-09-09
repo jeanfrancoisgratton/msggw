@@ -242,31 +242,23 @@ the complete flag list.
 
 ### 6. Backfill history on first bridge
 
-By default, the first time each conversation is bridged, `msg-gw` also posts
-its last 7 days of history — so messages your phone received before the
-daemon went live still show up in Mattermost, not just ones from that point
-on. `msg-gw backfill` changes this per user without hand-editing
+By default, the first time each conversation is bridged, `msg-gw` posts none
+of its prior history — only messages that arrive from that point on show up
+in Mattermost. `msg-gw backfill` changes this per user without hand-editing
 `config.json`:
 
 ```bash
-msg-gw backfill jfgratton --days 14
+msg-gw backfill jfgratton --backlog 50
 ```
 
-- `--days N` sets the window in days (the default is 7; `0` turns day-based
-  backfill off entirely).
-- `--count N` sets an alternative, count-based window — the last `N`
-  messages regardless of age — but it only takes effect when `--days`
-  resolves to `0`; otherwise it is ignored. `0` disables it too, so leaving
-  both at `0` means a newly bridged conversation starts empty, exactly like
-  the daemon's behaviour before this setting existed.
-- Only the flag(s) you pass are changed; leave one out and its current value
-  is kept.
+- `--backlog N` (`-b N`) sets how many recent messages to post, regardless of
+  age. `0` disables backfill — a newly bridged conversation starts empty.
 
 This only affects conversations bridged **after** the change — like routing
 rules, it is a good one to get right before a conversation shows up for the
 first time, not something to reload for on every edit. And it is not free:
 backfilling posts every fetched message (and re-uploads every attachment on
-it) synchronously, before the bridge handles anything else, so a wide window
+it) synchronously, before the bridge handles anything else, so a long count
 or a media-heavy conversation will visibly stall live message delivery the
 first time it runs. It also does not carry the original send time into
 Mattermost — every backfilled post is timestamped when it was posted, not

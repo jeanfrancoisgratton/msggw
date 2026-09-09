@@ -3,7 +3,7 @@
 %define _name msggw
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
-%define _version 0.30.0
+%define _version 0.30.1
 %define _rel 1
 %define _arch x86_64
 %define _binaryname msg-gw
@@ -55,6 +55,10 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Tue Sep 08 2026 Binary package builder <builder@famillegratton.net> 0.30.1-1
+- Removed backfill_days (redundant with backfill_count)
+- Renamed msg-gw backfill's --count flag to --backlog/-b
+
 * Tue Sep 08 2026 Binary package builder <builder@famillegratton.net> 0.30.0-1
 - Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
 - feat: backfill_count

@@ -136,35 +136,22 @@ func (b *Bridge) handleConversationUpdate(ctx context.Context, conv gmessages.Co
 // backfill posts the tail of a conversation's history when it is first
 // bridged, oldest first so the thread reads in order.
 //
-// The day-based window (GMessagesConfig.BackfillDays) takes priority: it is
-// what a deployment gets by default, and the count-based one
-// (GMessagesConfig.BackfillCount) only runs when days is explicitly disabled
-// (0). Both at 0 means no backfill at all.
+// GMessagesConfig.BackfillCount controls how many recent messages to fetch;
+// 0 (the default) means no backfill at all.
 func (b *Bridge) backfill(ctx context.Context, stored storage.Conversation) {
 	gm := b.user.GMessages
-
-	var (
-		messages []gmessages.Message
-		err      error
-		window   string
-	)
-	switch {
-	case gm.BackfillDaysCount() > 0:
-		days := gm.BackfillDaysCount()
-		messages, err = b.gm.FetchMessagesSince(ctx, stored.ID, time.Now().AddDate(0, 0, -days))
-		window = fmt.Sprintf("%d day(s)", days)
-	case gm.BackfillCount > 0:
-		messages, err = b.gm.FetchMessages(ctx, stored.ID, gm.BackfillCount)
-		window = fmt.Sprintf("%d message(s)", gm.BackfillCount)
-	default:
+	if gm.BackfillCount <= 0 {
 		return
 	}
+	window := fmt.Sprintf("%d message(s)", gm.BackfillCount)
+
+	messages, err := b.gm.FetchMessages(ctx, stored.ID, gm.BackfillCount)
 	if err != nil {
 		b.log.Warn("could not backfill a conversation", "conversation", stored.ID, "window", window, "error", err)
 		return
 	}
 
-	// Both FetchMessages and FetchMessagesSince return newest first.
+	// FetchMessages returns newest first.
 	posted := 0
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]

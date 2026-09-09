@@ -12,10 +12,7 @@ import (
 	"msggw/internal/config"
 )
 
-var (
-	backfillDays  int
-	backfillCount int
-)
+var backfillCount int
 
 var backfillCmd = &cobra.Command{
 	Use:   "backfill NAME",
@@ -23,26 +20,20 @@ var backfillCmd = &cobra.Command{
 	Long: `Change how much history "msg-gw" posts to Mattermost the first time each of
 NAME's conversations is bridged, without hand-editing config.json.
 
-  --days N    fetch the last N days of a conversation's history (default 7;
-              0 disables day-based backfill)
-  --count N   fetch the last N messages instead, regardless of age (0
-              disables it too; only consulted when --days resolves to 0)
+  --backlog N, -b N   fetch the last N messages of a conversation's history
+                      (0 disables backfill)
 
-Only the flag(s) you actually pass are changed; whichever setting you leave
-out keeps its current value. See "msg-gw config sample" and
-docs/CONFIGURATION.md#gmessages for how the two settings interact.
-
-Both apply only to conversations bridged after this change — an
-already-bridged conversation keeps whatever history it started with.
+Applies only to conversations bridged after this change — an already-bridged
+conversation keeps whatever history it started with.
 
 Example:
 
-  msg-gw backfill jfgratton --days 14
+  msg-gw backfill jfgratton --backlog 50
 
 Fetching runs synchronously the first time each conversation is seen, one
 message (and its attachments) at a time, and blocks the bridge from handling
-any other message while it does — a wide window or a media-heavy history will
-visibly stall live traffic on that first run.
+any other message while it does — a long backlog or a media-heavy history
+will visibly stall live traffic on that first run.
 
 The change is validated the same way "msg-gw config check" validates
 config.json, and only written if the result still loads cleanly — but the
@@ -56,13 +47,11 @@ reload").`,
 			return err
 		}
 
-		daysChanged := cmd.Flags().Changed("days")
-		countChanged := cmd.Flags().Changed("count")
-		if !daysChanged && !countChanged {
-			return fmt.Errorf("nothing to change: pass --days and/or --count")
+		if !cmd.Flags().Changed("backlog") {
+			return fmt.Errorf("nothing to change: pass --backlog")
 		}
 
-		newCfg, err := setBackfill(cfg, args[0], daysChanged, backfillDays, countChanged, backfillCount)
+		newCfg, err := setBackfill(cfg, args[0], backfillCount)
 		if err != nil {
 			return err
 		}
@@ -72,17 +61,16 @@ reload").`,
 			return err
 		}
 		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "%s: backfill_days=%d backfill_count=%d\n",
-			args[0], user.GMessages.BackfillDaysCount(), user.GMessages.BackfillCount)
+		fmt.Fprintf(out, "%s: backfill_count=%d\n", args[0], user.GMessages.BackfillCount)
 		fmt.Fprintln(out, `Run "msg-gw reload" to pick up the change.`)
 		return nil
 	},
 }
 
-// setBackfill applies the requested backfill changes to name's entry via
+// setBackfill applies the requested backfill count to name's entry via
 // config.Mutate, so the write is validated and atomic the same way "msg-gw
-// rules" is. Only the fields whose *Changed flag is true are touched.
-func setBackfill(cfg *config.Config, name string, daysChanged bool, days int, countChanged bool, count int) (*config.Config, error) {
+// rules" is.
+func setBackfill(cfg *config.Config, name string, count int) (*config.Config, error) {
 	if _, err := findUser(cfg, name); err != nil {
 		return nil, err
 	}
@@ -92,13 +80,7 @@ func setBackfill(cfg *config.Config, name string, daysChanged bool, days int, co
 			if c.Users[i].Name != name {
 				continue
 			}
-			if daysChanged {
-				d := days
-				c.Users[i].GMessages.BackfillDays = &d
-			}
-			if countChanged {
-				c.Users[i].GMessages.BackfillCount = count
-			}
+			c.Users[i].GMessages.BackfillCount = count
 			return nil
 		}
 		return fmt.Errorf("no user named %q in %s", name, cfg.Path())
@@ -106,8 +88,6 @@ func setBackfill(cfg *config.Config, name string, daysChanged bool, days int, co
 }
 
 func init() {
-	backfillCmd.Flags().IntVar(&backfillDays, "days", config.DefaultBackfillDays,
-		"days of conversation history to backfill on first bridge (0 disables day-based backfill)")
-	backfillCmd.Flags().IntVar(&backfillCount, "count", 0,
-		"messages to backfill on first bridge instead, if --days resolves to 0 (0 disables)")
+	backfillCmd.Flags().IntVarP(&backfillCount, "backlog", "b", 0,
+		"messages to backfill on first bridge (0 disables)")
 }
