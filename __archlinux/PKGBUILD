@@ -33,7 +33,9 @@ build() {
   export GOPATH="${srcdir}/gopath"
   export GOMODCACHE="${GOPATH}/pkg/mod"
 
-  go build -trimpath -mod=readonly -modcacherw -ldflags="-s -w -buildid=" -o "${_binaryname}" .
+  builddate="$(date +%Y.%m.%d)"
+
+  go build -trimpath -mod=readonly -modcacherw -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=${pkgver} -X msggw/cmd.buildDate=${builddate}" -o "${_binaryname}" .
 }
 
 check() {

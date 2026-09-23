@@ -40,11 +40,15 @@ Getting started (no root needed — this writes to your own
   message-gateway daemon`,
 }
 
+// buildVersion and buildDate are set via -ldflags -X at package-build time.
+var buildVersion = "dev"
+var buildDate = "unknown"
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the software version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(hftx.White("msg-gw 0.21.0 (2026.09.07), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+		fmt.Println(hftx.White("msg-gw " + buildVersion + " (" + buildDate + "), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
 	},
 }
 

@@ -43,7 +43,7 @@ MANIFEST     := ../msggw.json
 
 NAME         := $(shell jq -r '.softwarename'  $(MANIFEST))
 VERSION      := $(shell jq -r '.versionnumber' $(MANIFEST))
-RELEASE      := $(shell jq -r '.releasenumber' $(MANIFEST))
+RELEASE      := $(shell jq -r '.defaultreleasenumber' $(MANIFEST))
 BINARY       := $(shell jq -r '.binaryname'    $(MANIFEST))
 DESCRIPTION  := $(shell jq -r '.description'   $(MANIFEST))
 MANUFACTURER := $(shell jq -r '.manufacturer'  $(MANIFEST))

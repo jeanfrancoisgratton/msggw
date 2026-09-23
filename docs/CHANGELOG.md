@@ -1,7 +1,7 @@
 | Release | Date        | Comments                                                                                                                                                             |
 |---------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0.30.1  | 2026.09.08  | Removed `backfill_days` (redundant with `backfill_count`); renamed `msg-gw backfill`'s `--count` flag to `--backlog`/`-b` |
-| 0.30.0  | 2026.09.07  | `backfill_count` is now a per-user setting |
+| 0.30.0  | 2026.09.08  | `backfill_count` is now a per-user setting |
 | 0.21.0  | 2026.09.06  | New spin for the container  |
 | 0.10.0  | 2026.09.01  | Added `tokengen` helper facilities                                                                                                                                   |                                                                                                                                  |
 | 0.9.0   | 2026.09.01  | Self-service routing rules (`msg-gw rules pull/push --remote`); persistent listener survives reloads; automatic rollback on a failed reload; near-prod version bump. |

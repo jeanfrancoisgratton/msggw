@@ -25,8 +25,10 @@ build() {
 
 	go env | egrep 'GOFLAGS|CGO_ENABLED|GOOS|GOARCH' || true
 
+	builddate="$(date +%Y.%m.%d)"
+
 	# Static, non-PIE, internal linker
-	go build -trimpath -ldflags="-s -w -buildid= -linkmode=internal" -o "$binaryname" .
+	go build -trimpath -ldflags="-s -w -buildid= -linkmode=internal -X msggw/cmd.buildVersion=$pkgver -X msggw/cmd.buildDate=$builddate" -o "$binaryname" .
 }
 
 package() {

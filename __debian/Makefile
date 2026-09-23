@@ -22,6 +22,12 @@ VERSION   := $(shell awk -F': +' '/^Version:/{print $$2}'      $(CONTROL))
 ARCH      := $(shell awk -F': +' '/^Architecture:/{print $$2}' $(CONTROL))
 BINARY    := msg-gw
 
+# control's Version is "<upstream>-<debian revision>" (e.g. 0.30.1-1); the
+# binary should only ever report the upstream part, independent of this
+# distro's packaging revision.
+UPSTREAM_VERSION := $(shell echo $(VERSION) | sed 's/-[^-]*$$//')
+BUILDDATE         := $(shell date +%Y.%m.%d)
+
 NEXUSREPO := aptLocal
 SRCDIR    := ../src
 STAGING   := $(NAME)-$(VERSION)_$(ARCH)
@@ -36,7 +42,7 @@ build:
 	# copyright is documentation, not a control file: policy puts it at
 	# /usr/share/doc/<package>/copyright, and it must be 0644 there.
 	install -m 0644 copyright "$(STAGING)/usr/share/doc/$(NAME)/copyright"
-	cd $(SRCDIR) && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid=" \
+	cd $(SRCDIR) && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=$(UPSTREAM_VERSION) -X msggw/cmd.buildDate=$(BUILDDATE)" \
 	  -o "$(CURDIR)/$(STAGING)/opt/sbin/$(BINARY)" .
 	sudo chown -R 0:0 "$(STAGING)/opt/sbin/$(BINARY)"
 	dpkg-deb -b "$(STAGING)" "$(DEB)"

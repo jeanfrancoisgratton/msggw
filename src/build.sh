@@ -70,4 +70,8 @@ else
   BUILD_OUTPATH="$OUTPATH"
 fi
 
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid=" -o "$BUILD_OUTPATH"   .
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+MSGGWVERSION="$(sed -n 's/.*"versionnumber": *"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/../msggw.json")"
+BUILDDATE="$(date +%Y.%m.%d)"
+
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=$MSGGWVERSION -X msggw/cmd.buildDate=$BUILDDATE" -o "$BUILD_OUTPATH" .
