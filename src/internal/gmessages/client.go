@@ -26,6 +26,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
+	"go.mau.fi/util/exhttp"
 )
 
 // Config is what a Client needs to exist.
@@ -87,7 +88,7 @@ func New(cfg Config) (*Client, error) {
 		events:        newQueue(),
 		conversations: make(map[string]*gmproto.Conversation),
 	}
-	c.gm = libgm.NewClient(auth, nil, zerologFor(log, cfg.LogLevel))
+	c.gm = libgm.NewClient(auth, nil, zerologFor(log, cfg.LogLevel), exhttp.SensibleClientSettings)
 	c.gm.SetEventHandler(c.handleLibgmEvent)
 	if cfg.PingInterval > 0 {
 		c.gm.SetPingInterval(cfg.PingInterval)
@@ -109,7 +110,7 @@ func NewUnpaired(cfg Config) *Client {
 		events:        newQueue(),
 		conversations: make(map[string]*gmproto.Conversation),
 	}
-	c.gm = libgm.NewClient(libgm.NewAuthData(), nil, zerologFor(log, cfg.LogLevel))
+	c.gm = libgm.NewClient(libgm.NewAuthData(), nil, zerologFor(log, cfg.LogLevel), exhttp.SensibleClientSettings)
 	c.gm.SetEventHandler(c.handleLibgmEvent)
 	return c
 }
@@ -124,7 +125,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		// abort.
 		c.log.Warn("could not fetch the Google Messages client config", "error", err)
 	}
-	if err := c.gm.Connect(); err != nil {
+	if err := c.gm.Connect(ctx); err != nil {
 		return fmt.Errorf("connecting to Google Messages: %w", err)
 	}
 	return nil
