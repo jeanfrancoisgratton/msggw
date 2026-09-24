@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/browserutils/kooky v0.2.10
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/chromedp/cdproto v0.0.0-20260922220944-a19bff23514f
 	github.com/chromedp/chromedp v0.16.0
 	github.com/google/uuid v1.6.0
@@ -14,6 +15,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	go.mau.fi/mautrix-gmessages v0.2609.0
+	go.mau.fi/util v0.10.1
 	golang.org/x/term v0.46.0
 	modernc.org/sqlite v1.59.0
 )
@@ -93,7 +95,6 @@ require (
 	github.com/wiggin77/srslog v1.0.1 // indirect
 	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/zalando/go-keyring v0.2.8 // indirect
-	go.mau.fi/util v0.10.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect

@@ -21,8 +21,10 @@ const defaultConversationCount = 100
 // ListConversations returns the inbox, most recent first, and refreshes the
 // conversation cache from it.
 func (c *Client) ListConversations(ctx context.Context) ([]Conversation, error) {
-	resp, err := c.gm.ListConversations(ctx, defaultConversationCount,
-		gmproto.ListConversationsRequest_INBOX)
+	resp, err := c.gm.ListConversations(ctx, &gmproto.ListConversationsRequest{
+		Count:  int64(defaultConversationCount),
+		Folder: gmproto.ListConversationsRequest_INBOX,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing conversations: %w", err)
 	}

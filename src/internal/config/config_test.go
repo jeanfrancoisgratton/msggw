@@ -576,6 +576,113 @@ func TestValidateRuleList(t *testing.T) {
 	}
 }
 
+// TestDiscordRuleValidate covers DiscordRule.Validate in isolation, mirroring
+// TestRuleValidate for Discord's own criteria (guild/channel IDs and channel
+// name pattern instead of phones).
+func TestDiscordRuleValidate(t *testing.T) {
+	tests := []struct {
+		name string
+		rule DiscordRule
+		ok   bool
+	}{
+		{"valid, matches on channel id", DiscordRule{ChannelIDs: []string{"123"}, Destination: Destination{Type: DestDirect, User: "jf"}}, true},
+		{"valid, matches on guild id", DiscordRule{GuildIDs: []string{"456"}, Destination: Destination{Type: DestDirect, User: "jf"}}, true},
+		{"no criteria", DiscordRule{Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"both shape filters", DiscordRule{ChannelIDs: []string{"123"}, GroupsOnly: true, DirectsOnly: true, Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"bad regex", DiscordRule{ChannelNamePattern: "(", Destination: Destination{Type: DestDirect, User: "jf"}}, false},
+		{"invalid destination", DiscordRule{ChannelIDs: []string{"123"}, Destination: Destination{Type: DestDirect}}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.rule.Validate()
+			if tc.ok && err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+			if !tc.ok && err == nil {
+				t.Error("Validate() = nil, want an error")
+			}
+		})
+	}
+}
+
+// TestValidateDiscordRules mirrors TestValidateRules for Discord's own
+// ValidateDiscordRules.
+func TestValidateDiscordRules(t *testing.T) {
+	direct := Destination{Type: DestDirect, User: "jf"}
+
+	if err := ValidateDiscordRules(direct, Destination{}, nil); err != nil {
+		t.Errorf("a valid default_direct with no rules and no default_group was rejected: %v", err)
+	}
+
+	if err := ValidateDiscordRules(Destination{}, Destination{}, nil); err == nil {
+		t.Error("an empty (invalid) default_direct was accepted")
+	}
+
+	if err := ValidateDiscordRules(direct, Destination{Type: DestChannel, Channel: "missing-team"}, nil); err == nil {
+		t.Error("an invalid default_group was accepted even though default_direct alone is valid")
+	}
+
+	rules := []DiscordRule{{ChannelIDs: []string{"123"}, Destination: direct}}
+	if err := ValidateDiscordRules(direct, Destination{}, rules); err != nil {
+		t.Errorf("a valid rule was rejected: %v", err)
+	}
+
+	badRules := []DiscordRule{{Name: "oops", Destination: direct}}
+	err := ValidateDiscordRules(direct, Destination{}, badRules)
+	if err == nil {
+		t.Fatal("a rule with no criteria was accepted")
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("the error does not name the offending rule: %v", err)
+	}
+}
+
+// TestValidateDiscordRuleList mirrors TestValidateRuleList for Discord's own
+// ValidateDiscordRuleList.
+func TestValidateDiscordRuleList(t *testing.T) {
+	if err := ValidateDiscordRuleList(nil); err != nil {
+		t.Errorf("an empty rule list was rejected: %v", err)
+	}
+
+	direct := Destination{Type: DestDirect, User: "jf"}
+	if err := ValidateDiscordRuleList([]DiscordRule{{ChannelIDs: []string{"123"}, Destination: direct}}); err != nil {
+		t.Errorf("a valid rule was rejected: %v", err)
+	}
+
+	err := ValidateDiscordRuleList([]DiscordRule{{Name: "oops", Destination: direct}})
+	if err == nil {
+		t.Fatal("a rule with no criteria was accepted")
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("the error does not name the offending rule: %v", err)
+	}
+}
+
+// TestDiscordDisabledSkipsRoutingValidation covers that an operator who has
+// not set discord.token_ref is never forced to fill in a valid
+// discord.routing.default_direct for a backend they are not using.
+func TestDiscordDisabledSkipsRoutingValidation(t *testing.T) {
+	body := strings.TrimSuffix(minimalConfig, "}") + `, "discord": {"routing": {}}}`
+	if _, err := Load(writeConfig(t, body)); err != nil {
+		t.Errorf("a disabled discord block with no routing defaults was rejected: %v", err)
+	}
+}
+
+// TestDiscordEnabledRequiresValidRouting covers the flip side: once
+// discord.token_ref is set, its routing is held to the same standard as
+// GMessages users' routing.
+func TestDiscordEnabledRequiresValidRouting(t *testing.T) {
+	body := strings.TrimSuffix(minimalConfig, "}") +
+		`, "discord": {"token_ref": "env:DISCORD_TOKEN", "routing": {}}}`
+	_, err := Load(writeConfig(t, body))
+	if err == nil {
+		t.Fatal("an enabled discord block with an empty default_direct was accepted")
+	}
+	if !strings.Contains(err.Error(), "discord") {
+		t.Errorf("the error does not mention discord: %v", err)
+	}
+}
+
 // withStatFile swaps the package-level statFile seam for the duration of a
 // test, so discover()'s ordering can be exercised without touching the real
 // filesystem (in particular, without depending on whether /etc/msggw/

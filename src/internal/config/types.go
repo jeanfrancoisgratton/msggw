@@ -61,6 +61,12 @@ type Config struct {
 	Vault      secrets.VaultConfig `json:"vault,omitempty"`
 	Mattermost MattermostConfig    `json:"mattermost"`
 	Listener   ListenerConfig      `json:"listener,omitempty"`
+	// Discord is one shared bot connection for the whole daemon, unlike
+	// Users below: Discord has no per-phone pairing concept, so one bot
+	// application can serve any number of guilds/channels. An empty
+	// TokenRef disables it entirely, the same "empty means off" convention
+	// as ListenerConfig.Port and RemotePairingConfig.TokenRef.
+	Discord DiscordConfig `json:"discord,omitempty"`
 
 	// Users is one entry per paired phone — see docs/SOLUTION.md. There
 	// is always at least one: a single-user deployment is just a Users slice
@@ -307,6 +313,83 @@ type ListenerConfig struct {
 	// consequential thing for it to do silently. See internal/listener.
 	CertFile string `json:"cert_file,omitempty"`
 	KeyFile  string `json:"key_file,omitempty"`
+}
+
+// DiscordConfig covers the Discord side of the bridge: one shared bot
+// account for the whole daemon (see Config.Discord's doc comment for why
+// this is not a per-tenant list the way GMessages/Users is).
+type DiscordConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
+	// TokenRef resolves to the bot account's token. Empty disables Discord
+	// entirely.
+	TokenRef string `json:"token_ref,omitempty"`
+	// Routing decides where in Mattermost a Discord conversation shows up.
+	Routing DiscordRoutingConfig `json:"routing"`
+}
+
+// DiscordRoutingConfig mirrors RoutingConfig's shape and semantics, but for
+// Discord conversations: DefaultDirect/DefaultGroup apply to whatever no
+// rule matches, chosen by the conversation's own shape (a guild channel is
+// a "group", a DM or group DM is a "direct") — the same distinction
+// DiscordRule.GroupsOnly/DirectsOnly use.
+//
+// There is no PostDeliveryStatus field here: unlike RCS, a Discord bot has
+// no delivery/read-receipt signal to reflect back as a reaction.
+type DiscordRoutingConfig struct {
+	// Comment is documentation only; see Config.Comment.
+	Comment string `json:"_comment,omitempty"`
+
+	// DefaultDirect is used for a DM or group DM that no rule matches.
+	DefaultDirect Destination `json:"default_direct"`
+	// DefaultGroup is used for a guild channel that no rule matches. Left
+	// unset, it falls back to DefaultDirect.
+	DefaultGroup Destination `json:"default_group,omitempty"`
+	// Rules are evaluated in order; the first match wins.
+	Rules []DiscordRule `json:"rules,omitempty"`
+
+	// ThreadPerConversation maps each Discord channel to one Mattermost
+	// root post, with every message in that channel as a reply in its
+	// thread — the same layout RoutingConfig.ThreadPerConversation gives
+	// GMessages conversations.
+	ThreadPerConversation *bool `json:"thread_per_conversation,omitempty"`
+
+	// JoinChannels makes the daemon add the bot to a resolved Mattermost
+	// channel it is not yet a member of, or create it if it does not exist
+	// yet at all, rather than failing.
+	JoinChannels bool `json:"join_channels,omitempty"`
+}
+
+// ThreadPerConversationEnabled reads the tri-state ThreadPerConversation
+// flag after defaults have been applied, mirroring
+// RoutingConfig.ThreadPerConversationEnabled.
+func (r DiscordRoutingConfig) ThreadPerConversationEnabled() bool {
+	return r.ThreadPerConversation == nil || *r.ThreadPerConversation
+}
+
+// DiscordRule sends Discord conversations matching any of its criteria to a
+// destination. It mirrors Rule's shape, but matches on Discord's own
+// identifiers (guild ID, channel ID, channel name) rather than phone
+// numbers. An empty rule matches nothing, so that a half-written rule
+// cannot capture every conversation.
+type DiscordRule struct {
+	// Name is a label for logs. It has no effect on matching.
+	Name string `json:"name,omitempty"`
+
+	// GuildIDs matches the Discord guild (server) ID exactly.
+	GuildIDs []string `json:"guild_ids,omitempty"`
+	// ChannelIDs matches the Discord channel ID exactly.
+	ChannelIDs []string `json:"channel_ids,omitempty"`
+	// ChannelNamePattern is a regular expression matched against the
+	// channel's name.
+	ChannelNamePattern string `json:"channel_name_pattern,omitempty"`
+	// GroupsOnly restricts the rule to guild channels, DirectsOnly to DMs
+	// and group DMs. Setting both matches nothing.
+	GroupsOnly  bool `json:"groups_only,omitempty"`
+	DirectsOnly bool `json:"directs_only,omitempty"`
+
+	Destination Destination `json:"destination"`
 }
 
 // Destination is one place in Mattermost.
