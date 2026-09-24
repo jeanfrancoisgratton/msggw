@@ -2,7 +2,7 @@
 # Packager: Package builder <builder@famillegratton.net>
 
 pkgname=msggw
-pkgver=0.30.2
+pkgver=0.3.3
 pkgrel=1
 pkgdesc="Messages <-> Mattermost bridge"
 arch=('x86_64')
