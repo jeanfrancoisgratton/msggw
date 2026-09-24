@@ -55,6 +55,15 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Wed Sep 23 2026 Binary package builder <builder@famillegratton.net> 0.30.2-1
+- test build
+- do not build
+- Merge branch 'discord_integration'
+- do not build
+- chore: removed test files
+- first stub
+- release numbering aligned with other projects; builddeps update
+
 * Tue Sep 08 2026 Binary package builder <builder@famillegratton.net> 0.30.1-1
 - Removed backfill_days (redundant with backfill_count)
 - Renamed msg-gw backfill's --count flag to --backlog/-b
