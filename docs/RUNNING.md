@@ -4,8 +4,8 @@ There are two different hats worn around a `msg-gw` deployment, and
 this document has one section for each:
 
 - **The operator**, who builds and runs the daemon, owns the configuration
-  file, and creates the Mattermost bot account. See
-  [Setting up the daemon](#setting-up-the-daemon).
+  file, and creates the Mattermost bot account (and, optionally, a Discord
+  bot). See [Setting up the daemon](#setting-up-the-daemon).
 - **The user (client)**, who pairs their own Android phone's Google Messages
   app against one `users[]` entry the operator has prepared for them. See
   [Setting up a client (user)](#setting-up-a-client-user).
@@ -26,6 +26,7 @@ the other: set up the daemon, then pair yourself as its one user.
   - [6. Backfill history on first bridge](#6-backfill-history-on-first-bridge)
   - [7. Validate and run](#7-validate-and-run)
   - [8. Keep it running](#8-keep-it-running)
+  - [Adding Discord (optional)](#adding-discord-optional)
   - [Reloading a running daemon](#reloading-a-running-daemon)
 - [Setting up a client (user)](#setting-up-a-client-user)
   - [Preferred: reuse an already signed-in browser (no interaction needed)](#preferred-reuse-an-already-signed-in-browser-no-interaction-needed)
@@ -325,6 +326,52 @@ if that's your backend) and `root_dir` both survive a restart — see [Storage
 backend](CONFIGURATION.md#storage-backend). Restarting the daemon does not
 re-trigger pairing: it loads each user's stored session and reconnects
 silently.
+
+### Adding Discord (optional)
+
+Discord is a second, independent transport: one shared bot connection for
+the whole daemon, not one per person the way `users[]` is — there's no
+per-user pairing step to run, unlike [Setting up a client
+(user)](#setting-up-a-client-user) below.
+
+1. Create the bot itself in Discord's developer portal — a one-time,
+   click-by-click walkthrough for someone who's never done it before is at
+   [docs/discord-bot-setup.md](discord-bot-setup.md). The short version: one
+   application, the **Message Content** privileged intent turned on, and an
+   invite link with **View Channels / Send Messages / Read Message
+   History / Attach Files**.
+2. Store the bot token the same way as the Mattermost token — a [secret
+   reference](CONFIGURATION.md#secret-references), e.g.
+   `file:/etc/msggw/discord.token`.
+3. Add a top-level `discord` block to `config.json`, alongside `users`:
+
+   ```json
+   "discord": {
+     "token_ref": "file:/etc/msggw/discord.token",
+     "routing": {
+       "default_direct": { "type": "channel", "team": "myteam", "channel": "discord-dms" },
+       "default_group": { "type": "channel", "team": "myteam", "channel": "discord" },
+       "join_channels": true
+     }
+   }
+   ```
+
+   See [`discord`](CONFIGURATION.md#discord) for the full field reference,
+   including `routing.rules` (Discord's own equivalent of [routing
+   rules](#5-add-edit-and-remove-routing-rules), keyed on guild/channel IDs
+   instead of phone numbers — hand-edit this block for now, there's no
+   `msg-gw rules`-equivalent CLI for Discord yet).
+4. `msg-gw config check`, then `msg-gw daemon` (or `msg-gw reload` if it's
+   already running). Leaving `token_ref` empty or omitting the `discord`
+   block entirely just skips starting Discord — every Google Messages user
+   keeps working exactly as before.
+
+Watch the daemon's log for `bridge running backend=discord ...` followed by
+`connected to Discord`. From there, message the bot directly in Discord (or
+in a channel it's been invited to) and confirm it shows up in the
+Mattermost destination `routing.default_direct`/`default_group` points at —
+[docs/discord-bot-setup.md](discord-bot-setup.md) has the full walkthrough,
+including what to check if nothing shows up.
 
 ### Reloading a running daemon
 

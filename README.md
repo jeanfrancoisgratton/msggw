@@ -4,20 +4,25 @@
 
 # msggw
 
-**SMS, MMS and RCS to Mattermost gateway — more messaging platforms planned.**
+**SMS, MMS, RCS and Discord to Mattermost gateway — more messaging platforms planned.**
 
 `msggw` is a small self-hosted Go daemon (`msg-gw`) that surfaces SMS, MMS and — most
-importantly — **RCS** conversations from an Android phone inside a Mattermost server, and lets
-you reply to them straight from Mattermost. It started life as `rcs_gateway`.
+importantly — **RCS** conversations from an Android phone, and Discord DMs and channel
+messages, inside a Mattermost server, and lets you reply to them straight from Mattermost. It
+started life as `rcs_gateway`, RCS-only; Discord is the first of what a `Transport` interface
+(see [Discord: a second transport](#discord-a-second-transport) below) makes additive rather
+than invasive to add.
 
 ```text
-Android phone / Google Messages
-              ⇅
-        SMS / MMS / RCS
-              ⇅
-      msggw bridge daemon
-              ⇅
-          Mattermost
+Android phone / Google Messages       Discord
+             │                           │
+       SMS / MMS / RCS             REST + Gateway
+             │                           │
+             └───────────┬───────────────┘
+                          │
+                    msg-gw bridge daemon
+                          │
+                      Mattermost
 ```
 
 ---
@@ -33,6 +38,7 @@ Android phone / Google Messages
   - [Objective](#objective)
   - [Why not an SMS gateway](#why-not-an-sms-gateway)
   - [Selected approach: the Google Messages web protocol](#selected-approach-the-google-messages-web-protocol)
+  - [Discord: a second transport](#discord-a-second-transport)
   - [Architecture](#architecture)
   - [Mattermost integration](#mattermost-integration)
   - [Conversation model](#conversation-model)
@@ -53,16 +59,22 @@ Android phone / Google Messages
 
 ## Status
 
-**Written, not yet run against a real phone.**
+**Written, not yet run against a real phone or a real Discord bot.**
 
-The daemon is implemented end to end — pairing, session persistence, inbound messages,
-outbound replies, media both ways, delivery state, storage mappings and deduplication. It
-builds statically (`CGO_ENABLED=0`), passes `go vet`, and its routing, storage, configuration
-and secret-handling logic are unit-tested.
+The daemon is implemented end to end for both transports — pairing, session persistence,
+inbound messages, outbound replies, media both ways, delivery state, storage mappings and
+deduplication for Google Messages; connecting, receiving, sending and attachments for Discord,
+sharing that same routing/storage/Mattermost-facing machinery through a `Transport` interface
+(see [Discord: a second transport](#discord-a-second-transport)). It builds statically
+(`CGO_ENABLED=0`) and passes `go vet`. Its unit test suite was deliberately stripped for the
+time being while the transport-interface refactor settles — see
+[docs/discord-adapter-design.md](docs/discord-adapter-design.md) for what the pre-refactor
+suite covered, to be rebuilt against the new architecture.
 
-What has **not** happened is a live run: no real Android phone has been paired, and no real
-Mattermost server has been posted to. Everything touching the Google Messages protocol goes
-through `libgm` and is unverified in practice.
+What has **not** happened is a live run of either transport: no real Android phone has been
+paired, no real Discord bot has been connected, and no real Mattermost server has been posted
+to. Everything touching the Google Messages protocol goes through `libgm`, and everything
+touching Discord goes through `discordgo`, unverified in practice.
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for what has shipped, and
 [docs/SOLUTION.md](docs/SOLUTION.md#13-known-rough-edges) for the known limits and untested
@@ -101,12 +113,18 @@ msg-gw rules add NAME           add a routing rule (see --help for match/destina
 msg-gw rules remove NAME INDEX  remove routing rule INDEX
 msg-gw rules pull NAME          fetch a user's routing rules from a remote daemon
 msg-gw rules push NAME          replace a user's routing rules on a remote daemon
+msg-gw backfill NAME            change how much history a user's conversations backfill on first bridge
+msg-gw tokengen DESTINATION     generate a random bearer token, written straight to a secret reference
 msg-gw version                  print the version
 ```
 
-`reload` signals a locally running daemon by its pid file, and `rules list`/`add`/`remove` edit
-`config.json` directly — none of the three touch the network. `rules pull`/`push --remote`
-are the exception: "client mode" reaching a daemon over the network instead, the same way
+Discord has no subcommand of its own — it's one shared bot, not a per-user pairing, so
+configuring `discord.token_ref` in `config.json` and running `msg-gw daemon` is the whole setup;
+see [docs/discord-bot-setup.md](docs/discord-bot-setup.md) for creating the bot itself.
+
+`reload` signals a locally running daemon by its pid file, and `rules list`/`add`/`remove`/
+`backfill` edit `config.json` directly — none of them touch the network. `rules pull`/`push
+--remote` are the exception: "client mode" reaching a daemon over the network instead, the same way
 remote pairing does. Both are covered in [docs/RUNNING.md](docs/RUNNING.md).
 
 `NAME` matches a `name` entry under `users` in the configuration — one per
@@ -267,6 +285,29 @@ since the daemon never rewrites it.
 `msg-gw config check` resolves every reference and reports where each secret came from, without
 ever printing its value.
 
+### Discord is a second, optional backend
+
+A top-level `discord` block, alongside `users` rather than inside it, since it's one shared bot
+for the whole daemon instead of a per-tenant setting:
+
+```json
+"discord": {
+  "token_ref": "file:/etc/msggw/discord.token",
+  "routing": {
+    "default_direct": { "type": "channel", "team": "myteam", "channel": "discord-dms" },
+    "default_group": { "type": "channel", "team": "myteam", "channel": "discord" },
+    "join_channels": true
+  }
+}
+```
+
+Leaving `token_ref` empty, or leaving the whole `discord` block out, disables Discord entirely —
+every Google Messages user keeps working exactly as before. Routing works the same way as
+above, just keyed on Discord's own guild/channel IDs instead of phone numbers. See
+[docs/CONFIGURATION.md#discord](docs/CONFIGURATION.md#discord) for the full field reference and
+[docs/discord-bot-setup.md](docs/discord-bot-setup.md) for creating the bot itself, click by
+click, in Discord's developer portal.
+
 ---
 
 ## Proposed solution
@@ -280,8 +321,10 @@ Build a self-hosted gateway allowing SMS, MMS and **RCS** conversations from an 
 to appear in Mattermost, with bidirectional replies. The critical requirement is **RCS
 support** — any solution restricted to Android's conventional SMS APIs is insufficient.
 Beyond the Android transports, the longer-term goal is a gateway that isn't tied to a single
-messaging platform: **Facebook Messenger** support is planned as a future addition, using the
-same routing and storage machinery already built for Google Messages.
+messaging platform: **Discord** has since been added as the second transport (see [Discord: a
+second transport](#discord-a-second-transport)), sharing the routing and storage machinery
+built for Google Messages through a `Transport` interface rather than a special case; further
+transports remain additive on the same basis.
 
 ### Why not an SMS gateway
 
@@ -322,10 +365,45 @@ protocol, so the daemon behaves conceptually like Google Messages for Web, excep
 is a Go daemon instead of a browser. It therefore carries genuine RCS traffic rather than
 downgrading messages to SMS.
 
-Google Messages is the first transport, not the only one planned. `internal/gmessages` is kept
-isolated from `internal/bridge` and `internal/mattermost` specifically so that a future
-transport — Facebook Messenger being the next candidate — can be added as its own package
-without touching the routing, storage or Mattermost-facing code.
+Google Messages is the first transport, not the only one. `internal/gmessages` was kept
+isolated from `internal/mattermost` and `internal/storage` from the start specifically so a
+second transport could be added as its own package without touching the routing, storage or
+Mattermost-facing code — Discord is that second transport, described next.
+
+### Discord: a second transport
+
+Discord support is documented in full in
+[docs/msggw-rcs-mattermost-discord.md](docs/msggw-rcs-mattermost-discord.md) (the original
+multi-transport design proposal) and
+[docs/discord-adapter-design.md](docs/discord-adapter-design.md) (how the adapter was actually
+built, and where it diverges from the proposal). The short version:
+
+- **`internal/transport`** defines a normalized `Message`/`Conversation` model and a `Transport`
+  interface (`Connect`, `Disconnect`, `Events`, `Send`, `Download`, `Conversation`) that any
+  backend adapter implements — a literal least-common-superset merge of the shapes
+  `internal/gmessages` and `internal/discord` had already independently converged on.
+- **`internal/discord`** wraps [`discordgo`](https://github.com/bwmarrin/discordgo) the same way
+  `internal/gmessages` wraps `libgm`: everything that knows Discord's REST/Gateway protocol
+  lives there, translated into the normalized model by a small adapter file
+  (`internal/discord/transport.go`) rather than by changing the package itself.
+- **`internal/corebridge`** is the transport-agnostic bridge core — routing, conversation
+  bookkeeping, inbound/outbound message handling — generified from what was originally two
+  separate, hand-duplicated packages (one per transport) into one, so both Google Messages and
+  Discord run through the same engine. A few RCS-only mechanisms (asynchronous send-then-echo,
+  delivery-status reactions, backfill, mark-as-read) are expressed as optional capability
+  interfaces a transport may implement, rather than forced onto Discord as no-ops — Discord
+  implements none of them, since its protocol has no equivalent.
+- Discord is **one shared bot connection for the whole daemon**, not one per tenant the way
+  `users[]` is — there's no per-phone pairing concept to mirror, so `config.Discord` is a single
+  top-level block rather than a list. See [Discord is a second, optional
+  backend](#discord-is-a-second-optional-backend) above and
+  [docs/CONFIGURATION.md#discord](docs/CONFIGURATION.md#discord) for how to configure it, and
+  [docs/discord-bot-setup.md](docs/discord-bot-setup.md) for creating the bot itself.
+
+Known v1 limitations (no channel-rename tracking, no backfill, no delivery/read-receipt
+reflection, embed/sticker-only messages dropped silently, no special handling of other bots'
+messages) are deliberate scope cuts, documented in full in
+[docs/discord-adapter-design.md § Known v1 limitations](docs/discord-adapter-design.md#6-known-v1-limitations).
 
 ### Architecture
 
@@ -439,19 +517,20 @@ protocol supports it.
 
 ### Project layout
 
-As built, following the design's layout inside this repository's `src/` module root:
+As actually built, inside this repository's `src/` module root:
 
 ```text
 src/
 ├── main.go
 ├── cmd/                        cobra commands
-│   ├── root.go  common.go  config.go
-│   ├── pair.go  daemon.go  status.go  logout.go
-│   └── completion.go
+│   ├── root.go  common.go  config.go  completion.go
+│   ├── pair.go  pairserver.go  daemon.go  status.go  logout.go  reload.go
+│   ├── rules.go  rulesserver.go  backfill.go  tokengen.go
+│   └── discord.go
 │
 └── internal/
     ├── config/                 JSON configuration, defaults, validation
-    │   ├── config.go  types.go  sample.go  config.sample.json
+    │   ├── config.go  types.go  mutate.go  sample.go  config.sample.json
     │
     ├── secrets/                env: / file: / encoded: / vault: / literal:
     │   ├── secrets.go  stores.go  types.go
@@ -459,12 +538,37 @@ src/
     ├── gmessages/              everything that knows the Google protocol
     │   ├── client.go  auth.go  pair.go  events.go  messages.go  media.go  types.go
     │
-    ├── mattermost/             REST + WebSocket bot client
+    ├── discord/                everything that knows the Discord protocol
+    │   ├── client.go  events.go  types.go  transport.go
+    │
+    ├── mattermost/             REST + WebSocket bot client — protocol-neutral,
+    │   │                       shared unchanged by every transport
     │   ├── client.go  channels.go  events.go  posts.go  media.go
     │
-    ├── bridge/                 the only package that knows about both sides
+    ├── transport/              the normalized Message/Conversation model and
+    │   │                       the Transport interface every adapter implements
+    │   ├── types.go  events.go  transport.go  capabilities.go
+    │
+    ├── corebridge/             the transport-agnostic bridge core — routing,
+    │   │                       conversations, inbound/outbound — currently
+    │   │                       running Discord; Google Messages is mid-migration
+    │   │                       onto it from internal/bridge below
+    │   ├── bridge.go  routing.go  conversations.go
+    │   ├── inbound.go  outbound.go
+    │
+    ├── bridge/                 the original, RCS-specific bridge — still what
+    │   │                       Google Messages runs on today, being retired in
+    │   │                       favor of internal/corebridge (see [Discord: a
+    │   │                       second transport](#discord-a-second-transport))
     │   ├── bridge.go  routing.go  conversations.go
     │   ├── inbound.go  outbound.go  delivery.go
+    │
+    ├── listener/               HTTP(S) listener: remote pairing, remote rules
+    │   ├── listener.go
+    │
+    ├── pairproto/  pairclient/     remote-pairing wire format and client
+    ├── rulesproto/  rulesclient/   remote-rules wire format and client
+    ├── browserauth/                signed-in-browser cookie reuse for pairing
     │
     └── storage/                SQLite and PostgreSQL mappings
         ├── db.go  sqlite.go  postgres.go
@@ -475,13 +579,24 @@ src/
 rebind step for PostgreSQL's numbered placeholders, so `conversations.go` and `messages.go`
 are shared unchanged between backends — see [Storage backend](#storage-backend-is-a-choice-not-a-fixture).
 SQLite remains the default and the one exercised against real message volume; the driver is
-`modernc.org/sqlite`, so the binary stays static even without PostgreSQL.
+`modernc.org/sqlite`, so the binary stays static even without PostgreSQL. It needed no changes
+at all to support Discord: its `tenant string` parameter was already generic, so
+`internal/corebridge` just passes it the fixed value `"discord"` where Google Messages passes a
+user's name.
 
-Everything that knows about the Google Messages protocol lives in `internal/gmessages`, and
-everything about Mattermost in `internal/mattermost`; neither imports the other. When Google
-changes the protocol — the project's main maintenance risk — the damage is contained to one
-package. The same isolation is what makes future transports (Facebook Messenger) additive
-rather than invasive.
+Everything that knows about the Google Messages protocol lives in `internal/gmessages`,
+everything about Discord in `internal/discord`, and everything about Mattermost in
+`internal/mattermost`; none of the three import each other. When Google changes the protocol —
+the project's main maintenance risk — the damage is contained to one package. The same
+isolation is what made Discord additive rather than invasive, and is what future transports
+get for free too.
+
+`internal/discordbridge` (Discord's own first, standalone bridge implementation, predating
+`internal/corebridge`) still exists on disk but is unused and slated for deletion once Google
+Messages finishes moving onto `internal/corebridge` too — see
+[docs/discord-adapter-design.md](docs/discord-adapter-design.md) for why it was built that way
+first, and [docs/msggw-rcs-mattermost-discord.md](docs/msggw-rcs-mattermost-discord.md) for the
+architecture it was superseded by.
 
 ### Persistent state
 
@@ -562,9 +677,10 @@ SMS/RCS service, Internet connectivity, and a valid paired-device relationship.
 7. **Licensing** — `mautrix/gmessages` / `libgm` is **AGPL-3.0**, which is why this project is
    also licensed under AGPL-3.0-or-later; the implications must still be reviewed before
    offering the bridge as a network service to third parties.
-8. **Multi-platform scope creep** — each additional transport (Facebook Messenger, and any
-   others down the line) brings its own protocol risk and maintenance burden; transports are
-   added one at a time, each with its own isolated package, rather than speculatively.
+8. **Multi-platform scope creep** — each additional transport (Discord, and any others down the
+   line) brings its own protocol risk and maintenance burden; transports are added one at a
+   time, each with its own isolated adapter package behind the shared `Transport` interface
+   (see [Discord: a second transport](#discord-a-second-transport)), rather than speculatively.
 
 ### MVP phases
 
@@ -580,9 +696,11 @@ Do not start with full SMS/MMS/RCS parity — build the smallest vertical slice 
 | 6 | **Media** — inbound/outbound attachments, MIME handling, file uploads both ways | Images cross the bridge in both directions |
 | 7 | **Message semantics** — delivery state, reactions, replies/quoting, read state, typing indicators, group conversations | Richer RCS features are reflected in Mattermost |
 
-Facebook Messenger (and any further transport) is deliberately **not** on this list: it is
-planned as a follow-on phase, added once the Google Messages transport is proven against a
-real phone.
+Discord (and any further transport) was deliberately **not** on this original list: it was
+planned as a follow-on phase, and has since landed as `internal/discord` +
+`internal/corebridge` — see [Discord: a second transport](#discord-a-second-transport) — ahead
+of the Google Messages transport actually being proven against a real phone, which remains
+outstanding regardless.
 
 ### First milestone
 
@@ -611,6 +729,9 @@ The trade-off is explicit and accepted:
 | [docs/RUNNING.md](docs/RUNNING.md) | How to set up the daemon, and how to pair a client (user) |
 | [docs/SOLUTION.md](docs/SOLUTION.md) | Full design document (authoritative) |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference: routing, storage backends, secrets, every key |
+| [docs/discord-bot-setup.md](docs/discord-bot-setup.md) | From-scratch walkthrough: creating a Discord bot for `msg-gw`, for someone who's never done it |
+| [docs/msggw-rcs-mattermost-discord.md](docs/msggw-rcs-mattermost-discord.md) | The original multi-transport design proposal (`Transport` interface, normalized message model) |
+| [docs/discord-adapter-design.md](docs/discord-adapter-design.md) | How the Discord adapter was actually built, and where it diverges from the proposal |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Release history |
 
 ---

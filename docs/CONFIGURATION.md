@@ -37,6 +37,8 @@ than a silently-applied default.
 - [`vault`](#vault)
 - [`mattermost`](#mattermost)
 - [`listener`](#listener)
+- [`discord`](#discord)
+  - [Discord routing](#discord-routing)
 - [`users`](#users)
   - [`gmessages`](#gmessages)
   - [Pairing](#pairing)
@@ -309,6 +311,98 @@ should not take the whole daemon down, but silently serving something that
 will eventually carry pairing cookies over an unencrypted port is the kind of
 mistake that must never happen quietly. Check the daemon's logs after
 changing anything under `listener` to confirm TLS is actually in effect.
+
+---
+
+## `discord`
+
+Discord is a second, independent transport alongside Google Messages: one
+shared bot connection for the whole daemon, not one per tenant the way
+[`users`](#users) is (a bot application, once invited, serves any number of
+guilds/DMs through a single gateway connection — there is no per-phone
+pairing concept to mirror). See
+[docs/discord-bot-setup.md](discord-bot-setup.md) for a from-scratch
+walkthrough on creating the bot itself in Discord's developer portal.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `token_ref` | secret reference | — | The bot account's token. **Empty or omitted disables Discord entirely** — the daemon simply does not start a Discord connection, the same "empty means off" convention as [`listener.port`](#listener). |
+| `routing` | object | — | Where a Discord conversation lands in Mattermost; see [Discord routing](#discord-routing). |
+
+```json
+"discord": {
+  "token_ref": "file:/etc/msggw/discord.token",
+  "routing": {
+    "default_direct": { "type": "channel", "team": "myteam", "channel": "discord-dms" },
+    "default_group": { "type": "channel", "team": "myteam", "channel": "discord" },
+    "thread_per_conversation": true,
+    "join_channels": true
+  }
+}
+```
+
+`routing` is only validated once `token_ref` is set — an operator who hasn't
+set Discord up yet is never forced to fill in a valid `default_direct` for a
+backend they aren't using.
+
+### Discord routing
+
+This mirrors [`routing`](#routing) closely, but keyed on Discord's own
+identifiers instead of phone numbers: a guild text channel is the "group"
+shape, a DM or group DM is the "direct" shape — the same distinction
+`groups_only`/`directs_only` use below.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `default_direct` | destination | — | **Required.** Used for a DM or group DM no rule matches. |
+| `default_group` | destination | `default_direct` | Used for a guild channel no rule matches. Omit it entirely to treat every Discord conversation the same. |
+| `rules` | list of rules | `[]` | Evaluated in order; the first match wins. |
+| `thread_per_conversation` | bool | `true` | Same layout as [Threads](#threads): one Mattermost root post per Discord channel, every message a reply in its thread. |
+| `join_channels` | bool | `false` | Same as [`routing.join_channels`](#routing) — let the daemon add the bot to, or create, a resolved Mattermost channel it isn't a member of yet. |
+
+Destinations are the exact same shape as [Destinations](#destinations) above
+(`channel`, `channel_id`, `direct`, `group`) — Discord routes into the same
+Mattermost teams/channels/DMs Google Messages does, there's nothing
+Discord-specific about where a message can land, only about what's matched
+to decide it should land there:
+
+```json
+{
+  "name": "one guild channel goes to my DMs",
+  "channel_ids": ["1234567890123456789"],
+  "destination": { "type": "direct", "user": "jfgratton" }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `name` | Label for logs. No effect on matching. |
+| `guild_ids` | Exact Discord guild (server) IDs. |
+| `channel_ids` | Exact Discord channel IDs. |
+| `channel_name_pattern` | Go regular expression against the channel's name — or, for a DM/group DM with no name of its own, the other participant's display name. |
+| `groups_only` / `directs_only` | Restrict the rule to guild channels or DMs/group DMs. Setting both is rejected. |
+| `destination` | Where matching conversations go. |
+
+Matching semantics are identical to [Rules](#rules): shape filters are
+*conditions* that must hold, identity criteria (`guild_ids`, `channel_ids`,
+`channel_name_pattern`) are *alternatives* where any one match is enough, a
+rule with only a shape filter matches every conversation of that shape, and
+a rule with no criteria at all is rejected.
+
+Three things Discord's routing deliberately does **not** have, all
+documented as v1 scope cuts in
+[docs/discord-adapter-design.md § Known v1 limitations](discord-adapter-design.md#6-known-v1-limitations):
+
+- **No `post_delivery_status`.** Discord gives a bot no delivery/read-receipt
+  signal to reflect back as a reaction — there's nothing to turn on.
+- **No backfill setting.** A newly bridged Discord channel starts empty;
+  there's no `backfill_count` equivalent yet (Discord's own message-history
+  endpoint would make this a straightforward addition later).
+- **No `msg-gw rules`-style CLI.** Unlike a user's Google Messages
+  `routing.rules`, Discord's `routing.rules` has no `add`/`remove`/`pull`/
+  `push` command yet — hand-edit this block and `msg-gw reload` (or
+  `msg-gw config check` first, to validate without touching the running
+  daemon).
 
 ---
 
@@ -758,3 +852,33 @@ two colliding.
 Each user pairs separately (`msg-gw pair jfgratton`, `msg-gw pair kiddo`) and
 runs independently once the daemon starts — one's phone being unreachable, or
 never having paired at all, has no effect on the other's.
+
+### Discord alongside Google Messages
+
+`discord` sits at the top level, next to `users` — not inside it, since it's
+one shared bot rather than a per-tenant setting:
+
+```json
+"discord": {
+  "token_ref": "file:/etc/msggw/discord.token",
+  "routing": {
+    "default_direct": { "type": "channel", "team": "myteam", "channel": "discord-dms" },
+    "default_group": { "type": "channel", "team": "myteam", "channel": "discord" },
+    "rules": [
+      {
+        "name": "the support server's #general goes to its own channel",
+        "guild_ids": ["123456789012345678"],
+        "destination": { "type": "channel", "team": "myteam", "channel": "support-discord" }
+      }
+    ],
+    "join_channels": true
+  }
+}
+```
+
+No pairing step applies to Discord — creating the bot (once, in Discord's
+developer portal — see [docs/discord-bot-setup.md](discord-bot-setup.md))
+and setting `token_ref` is the whole setup. It runs alongside every
+`users[]` entry, sharing the same Mattermost bot connection and storage
+backend, entirely independently: Discord failing to connect (a bad token, no
+network) does not stop any Google Messages user's bridge, and vice versa.
