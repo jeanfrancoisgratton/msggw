@@ -155,6 +155,10 @@ func (c *Config) applyDefaults() {
 			c.Users[i].Routing.ThreadPerConversation = &enabled
 		}
 	}
+	if c.Discord.Routing.ThreadPerConversation == nil {
+		enabled := true
+		c.Discord.Routing.ThreadPerConversation = &enabled
+	}
 }
 
 // Validate reports every problem it can find, so that fixing a config file
@@ -220,6 +224,16 @@ func (c *Config) Validate() error {
 
 	if c.Listener.Port != 0 && (c.Listener.Port < 1 || c.Listener.Port > 65535) {
 		problems = append(problems, fmt.Errorf("listener.port %d must be between 1 and 65535", c.Listener.Port))
+	}
+
+	// Discord's routing is only validated when Discord is actually enabled:
+	// an empty token_ref means the block is inert, and an operator who has
+	// not set it up yet should not be forced to fill in a default_direct
+	// for a backend they are not using.
+	if c.Discord.TokenRef != "" {
+		for _, problem := range validateDiscordRules(c.Discord.Routing.DefaultDirect, c.Discord.Routing.DefaultGroup, c.Discord.Routing.Rules) {
+			problems = append(problems, fmt.Errorf("discord: %w", problem))
+		}
 	}
 
 	switch c.Log.Level {
@@ -355,6 +369,77 @@ func (r Rule) Validate() error {
 	if r.NamePattern != "" {
 		if _, err := regexp.Compile(r.NamePattern); err != nil {
 			problems = append(problems, fmt.Errorf("name_pattern is not a valid regular expression: %w", err))
+		}
+	}
+	if err := r.Destination.Validate(); err != nil {
+		problems = append(problems, fmt.Errorf("destination: %w", err))
+	}
+
+	return errors.Join(problems...)
+}
+
+// ValidateDiscordRules checks discord.routing.default_direct,
+// discord.routing.default_group and discord.routing.rules in isolation from
+// the rest of config.json, mirroring ValidateRules for Discord's own rule
+// shape.
+func ValidateDiscordRules(defaultDirect, defaultGroup Destination, rules []DiscordRule) error {
+	return errors.Join(validateDiscordRules(defaultDirect, defaultGroup, rules)...)
+}
+
+func validateDiscordRules(defaultDirect, defaultGroup Destination, rules []DiscordRule) []error {
+	var problems []error
+
+	if err := defaultDirect.Validate(); err != nil {
+		problems = append(problems, fmt.Errorf("routing.default_direct: %w", err))
+	}
+	if defaultGroup.Type != "" {
+		if err := defaultGroup.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("routing.default_group: %w", err))
+		}
+	}
+	problems = append(problems, validateDiscordRuleList(rules)...)
+
+	return problems
+}
+
+// ValidateDiscordRuleList checks a list of Discord rules in isolation from
+// any default_direct/default_group, mirroring ValidateRuleList for Discord's
+// own rule shape.
+func ValidateDiscordRuleList(rules []DiscordRule) error {
+	return errors.Join(validateDiscordRuleList(rules)...)
+}
+
+func validateDiscordRuleList(rules []DiscordRule) []error {
+	var problems []error
+	for j, rule := range rules {
+		ruleLabel := fmt.Sprintf("routing.rules[%d]", j)
+		if rule.Name != "" {
+			ruleLabel = fmt.Sprintf("routing.rules[%d] (%s)", j, rule.Name)
+		}
+		if err := rule.Validate(); err != nil {
+			problems = append(problems, fmt.Errorf("%s: %w", ruleLabel, err))
+		}
+	}
+	return problems
+}
+
+// Validate checks that a Discord rule is well-formed in isolation: it has at
+// least one matching criterion, its shape filters aren't mutually
+// exclusive, its channel_name_pattern (if any) compiles, and its
+// destination is valid. Mirrors Rule.Validate for Discord's own criteria.
+func (r DiscordRule) Validate() error {
+	var problems []error
+
+	if len(r.GuildIDs) == 0 && len(r.ChannelIDs) == 0 && r.ChannelNamePattern == "" &&
+		!r.GroupsOnly && !r.DirectsOnly {
+		problems = append(problems, errors.New("has no criteria, so it would never match"))
+	}
+	if r.GroupsOnly && r.DirectsOnly {
+		problems = append(problems, errors.New("sets both groups_only and directs_only, so it can never match"))
+	}
+	if r.ChannelNamePattern != "" {
+		if _, err := regexp.Compile(r.ChannelNamePattern); err != nil {
+			problems = append(problems, fmt.Errorf("channel_name_pattern is not a valid regular expression: %w", err))
 		}
 	}
 	if err := r.Destination.Validate(); err != nil {

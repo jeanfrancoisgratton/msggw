@@ -36,6 +36,35 @@
     "key_file": "/etc/msggw/tls/listener.key"
   },
 
+  "discord": {
+    "_comment": "one shared bot for the whole daemon; leave token_ref empty to disable Discord entirely",
+    "token_ref": "file:/etc/msggw/discord.token",
+    "routing": {
+      "default_direct": {
+        "type": "channel",
+        "team": "myteam",
+        "channel": "discord-dms"
+      },
+      "default_group": {
+        "type": "channel",
+        "team": "myteam",
+        "channel": "discord"
+      },
+      "rules": [
+        {
+          "name": "example: one guild channel goes to my DMs",
+          "channel_ids": ["CHANGEME_CHANNEL_ID"],
+          "destination": {
+            "type": "direct",
+            "user": "CHANGEME"
+          }
+        }
+      ],
+      "thread_per_conversation": true,
+      "join_channels": true
+    }
+  },
+
   "users": [
     {
       "name": "CHANGEME",

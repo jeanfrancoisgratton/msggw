@@ -77,7 +77,7 @@ func (p *Pairing) Start(ctx context.Context, cookies map[string]string) (emoji s
 	if err := p.client.gm.FetchConfig(ctx); err != nil {
 		return "", fmt.Errorf("fetching the Google Messages client config: %w", err)
 	}
-	emoji, sess, err := p.client.gm.StartGaiaPairing(ctx)
+	emoji, sess, err := p.client.gm.StartGaiaPairing(ctx, ctx)
 	if err != nil {
 		return "", fmt.Errorf("starting the pairing: %w", err)
 	}
@@ -113,7 +113,7 @@ func (p *Pairing) Verify(ctx context.Context) ([]Conversation, error) {
 		return nil, ctx.Err()
 	}
 
-	if err := p.client.gm.Reconnect(); err != nil {
+	if err := p.client.gm.Reconnect(ctx); err != nil {
 		return nil, fmt.Errorf("reconnecting after pairing: %w", err)
 	}
 

@@ -318,6 +318,20 @@ func runGeneration(ctx context.Context, cfg *config.Config, log *slog.Logger, re
 			runUser(ctx, cfg, user, log, db, mm)
 		}(user)
 	}
+
+	// Discord is one shared bot connection, not per-tenant, so it is
+	// started once here rather than once per cfg.Users entry — see
+	// config.DiscordConfig's doc comment. An empty TokenRef means the
+	// operator has not set Discord up, the same "empty means off"
+	// convention as ListenerConfig.Port.
+	if cfg.Discord.TokenRef != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runDiscord(ctx, cfg, log, db, mm)
+		}()
+	}
+
 	wg.Wait()
 	return nil
 }

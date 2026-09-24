@@ -8,6 +8,7 @@ package gmessages
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func (c *Client) Download(ctx context.Context, media Media) (data []byte, isThum
 	}
 
 	if media.ID != "" {
-		data, err = c.gm.DownloadMedia(media.ID, media.DecryptionKey)
+		data, err = readMedia(c.gm.DownloadMedia(media.ID, media.DecryptionKey))
 		if err == nil {
 			return data, false, nil
 		}
@@ -36,11 +37,21 @@ func (c *Client) Download(ctx context.Context, media Media) (data []byte, isThum
 			"name", media.Name, "error", err)
 	}
 
-	data, err = c.gm.DownloadMedia(media.ThumbnailID, media.ThumbnailDecryptionKey)
+	data, err = readMedia(c.gm.DownloadMedia(media.ThumbnailID, media.ThumbnailDecryptionKey))
 	if err != nil {
 		return nil, false, fmt.Errorf("downloading the thumbnail of attachment %q: %w", media.Name, err)
 	}
 	return data, true, nil
+}
+
+// readMedia drains and closes the stream libgm's DownloadMedia decrypts on
+// the fly, since callers here want the whole attachment in memory anyway.
+func readMedia(rc io.ReadCloser, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
 }
 
 // RequestFullSize asks the phone to download an MMS attachment it has not
