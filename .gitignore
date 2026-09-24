@@ -20,4 +20,4 @@
 src/.depupdate*
 
 LIVE-CONFIG.json
-
+.idea
