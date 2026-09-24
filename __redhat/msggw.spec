@@ -55,6 +55,109 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Wed Sep 23 2026 Binary package builder <builder@famillegratton.net> 0.3.3-1
+- test build #2
+- gitignore fix
+- do not build
+- updated banner
+- Merge branch 'main' into develop
+- chore: update changelog for 0.30.2-1
+- test build
+- do not build
+- Merge branch 'discord_integration'
+- do not build
+- chore: removed test files
+- first stub
+- release numbering aligned with other projects; builddeps update
+- removed backfill_days
+- chore: update changelog for 0.30.0-1
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- feat: backfill_count
+- chore: update changelog for 0.21.0-1
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- Version bump to test the container
+- chore: update changelog for 0.20.0-1
+- feat: new config dir search priority
+- misc fixes
+- -A
+- added another pairing fallback
+- chore: update changelog for 0.11.1-1
+- feat: pairing now favours fallback method
+- chore: doc update
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- chore: update changelog for 0.11.0-1
+- rc1 : testing container deployment
+- added a comment field in the config for documentation purposes
+- chore: version bump
+- chore: test alpinebuilder
+- dontexec
+- Merge branch 'develop'
+- chore: updated IDE settings
+- chore: update changelog for 0.10.0-1
+- Merge branch 'develop'
+- added a token generator
+- chore: update changelog for 0.9.0-2
+- Merge branch 'develop'
+- chore: changed binary name in the version subcommand; cosmetic change
+- chore: documentation update
+- removed dontexec flags
+- removed dontexec flags
+- bug(ARCHBUILDER): fixed race condition in test suite; prod code was not involved
+- chore: update changelog for 0.9.0-1
+- chore: changed the binary name to msg-gw
+- feat: self-service routing-rules push over the listener; 0.9.0 version bump
+- feat: added a daemon reload command
+- Merge branch 'configs' into develop
+- chore: doc update
+- chore: builddeps upgrade
+- feat: let pair provision a new user (--mattermost-user, --email, --mattermost-server)
+- feat: add msg-gw rules command (add/remove/list) on the config-mutation layer
+- feat: add an atomic, validated config-mutation layer
+- feat: split routing.default into default_direct/default_group
+- chore: doc refactoring
+- feat: config refactoring
+- feature: automated pairing process (take3)
+- Merge branch 'docs' into develop
+- docs actualised to simplify the pairing process
+- focus on doc
+- chore: update changelog for 0.7.1-2
+- Merge branch 'develop'
+- more targetdir fixes
+- chore: update changelog for 0.7.1-1
+- Merge branch 'develop'
+- bug(winbuilder): fixed default targetdir
+- chore: update changelog for 0.7.0-1
+- remove dontexec flag
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- version bump, trial build
+- dontexec
+- pairing users - phase 2
+- multi-tenancy support
+- added a listener; more to come
+- chore: update changelog for 0.5.0-2
+- Merge branch 'main' into develop
+- bug(BUILDERS): binary should be installed in /opt/sbin, not /opt/bin
+- chore: update changelog for 0.5.0-1
+- Merge branch 'develop'
+- chore: buildeps update, version bump, doc update
+- feat(storage): back-ends are now multi-tenants aware, even if currently unused
+- chore: update changelog for 0.4.0-1
+- Merge branch 'develop'
+- Version bump
+- feat(config): configuration now resolves various URI schemes
+- chore: update changelog for 0.2.0-1
+- version bump
+- feature(config): config file now supports multiple backends
+- chore: updated sample file so it reflects the availability of a new PGSQL backend
+- feat: removing mentions of FB messenger support; Meta makes it too hard to support
+- chore: changed the binary name being built
+- bug(ARCHBUILDER): fixed cleanup steps in Makefile
+- APKBUILDER: renamed pre/post scripts
+- completed tool rebranding
+- Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
+- go version bump: 1.26.6 -> 1.27.0
+- chore: update changelog for 0.0.1-1
+
 * Wed Sep 23 2026 Binary package builder <builder@famillegratton.net> 0.30.2-1
 - test build
 - do not build
