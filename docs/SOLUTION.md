@@ -570,12 +570,12 @@ section 4. Read it top to bottom; it's the canonical wiring sequence:
 cfg, err := loadConfig()
 log := newLogger(cfg)
 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-db, err := openStorage(ctx, cfg)                        // sqlite, or postgres — see 6c
-mm, err := newMattermost(ctx, cfg, log)                 // connects + authenticates now
-gm, err := newGMessagesClientWithRetry(ctx, log, gmCfg) // retries while unpaired — see below
-gm.Connect(ctx)                                          // brings up the phone session
+db, err := openStorage(ctx, cfg)         // sqlite, or postgres — see 6c
+mm, err := newMattermost(ctx, cfg, log)  // connects + authenticates now
+gm, err := gmessages.New(gmCfg)          // ErrNotPaired if NAME hasn't paired yet — see below
+gm.Connect(ctx)                           // brings up the phone session
 br, err := bridge.New(cfg, log, db, gm, mm)
-return br.Run(ctx)                                       // the loop from section 4
+return br.Run(ctx)                        // the loop from section 4
 ```
 
 Everything gets built and connected up front, in `cmd/common.go` (the
@@ -586,21 +586,19 @@ of it already wired and connected; the bridge itself does no construction, which
 is what makes it plausible to unit-test in isolation from real network
 connections.
 
-**`newGMessagesClientWithRetry` (`daemon.go`, next to the command) exists for
-one scenario: a container that starts `daemon` before anyone has run `pair`.**
-Plain `gmessages.New` returns `ErrNotPaired` the instant there is no session at
-the user's derived session path (`Config.SessionRef(user)`,
-`internal/config/config.go`; `gmessages/auth.go:56`) — that's correct for a human
-running the CLI directly, but fatal for a container that starts the daemon and
-runs `pair` as two separate steps: the daemon would exit before pairing ever
-had a chance to happen. The retry loop catches specifically that error (any
-other error from `gmessages.New` still fails immediately) and waits, logging a
-`warn` each time, for `unpairedStartupRetries` (5) attempts,
-`unpairedStartupInterval` (60s) apart — a four-minute window for `msg-gw pair`
-to run against the same session store before the daemon gives up for good. The
-wait itself is a `select` on `ctx.Done()` vs. `time.After(...)`, so `docker
-stop` during that window still shuts things down promptly instead of blocking
-on the sleep.
+**Pairing is on-demand, not something `runUser` (`daemon.go`) waits around
+for.** Plain `gmessages.New` returns `ErrNotPaired` the instant there is no
+session at the user's derived session path (`Config.SessionRef(user)`,
+`internal/config/config.go`; `gmessages/auth.go:56`). `runUser` treats that the
+same as `runDiscord` treats a backend that isn't ready: log it and return,
+without retrying — GMessages is one backend among several now (`runDiscord`,
+`cmd/discord.go`), not the thing the daemon's startup revolves around, so
+there is no GMessages-specific wait loop baked into starting up. A container
+that starts `daemon` before anyone has run `pair` simply leaves that one
+tenant's goroutine not started; running `msg-gw pair NAME` (locally or
+`--remote`) and then `msg-gw reload` — the same mechanism already used to pick
+up any other `config.json` change — is what brings that tenant's bridge up,
+whenever pairing actually happens to complete.
 
 With several tenants (section 7), a per-tenant startup failure — a broken or
 not-yet-paired session — is logged and that tenant's goroutine simply does not

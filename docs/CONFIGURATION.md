@@ -512,12 +512,13 @@ the volume-mount caveat [above](#storage-backend) — a restarted container
 reconnects every user silently.
 
 **Pairing a user in an unattended container.** If a user has no session yet,
-that user's bridge does not fail the whole daemon: it retries for 5 attempts,
-60 seconds apart (logging a `warn` line each time), before giving up on that
-user alone — a four-minute window to pair from a separate step:
+that user's bridge does not fail the whole daemon: it logs a `warn` line and
+does not start, without retrying — pairing is on-demand, not something the
+daemon polls for. Pair from a separate step, then reload to pick it up:
 
 ```bash
 docker exec -it msggw msg-gw pair NAME --cookies-file cookies.json
+docker exec -it msggw msg-gw reload
 docker logs -f msggw
 ```
 

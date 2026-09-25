@@ -559,9 +559,10 @@ The phone sent 12 conversations:
 Pairing complete. Start the bridge with "msg-gw daemon".
 ```
 
-If the daemon is already running, it picks up newly-paired sessions on its
-own next reconnect attempt for that user — no restart needed if you paired
-within its retry window (5 attempts, 60 seconds apart, from daemon startup).
+If the daemon is already running, it does not pick up a newly-paired session
+on its own — pairing is on-demand, not something the daemon polls for. Run
+`msg-gw reload` (or send `SIGHUP`) after pairing to bring that user's bridge
+up.
 
 ### Remote pairing — client mode
 
