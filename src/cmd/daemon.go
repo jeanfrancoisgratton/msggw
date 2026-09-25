@@ -18,7 +18,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,15 +27,6 @@ import (
 	"msggw/internal/listener"
 	"msggw/internal/mattermost"
 	"msggw/internal/storage"
-)
-
-// When a user starts before "msg-gw pair NAME" has ever been run for them, it
-// retries instead of failing outright, so a container that starts the daemon
-// and the pairing command separately has a window to pair before that user's
-// bridge gives up.
-const (
-	unpairedStartupRetries  = 5
-	unpairedStartupInterval = 60 * time.Second
 )
 
 // reloadRequest asks the generation loop to reload config.json. source
@@ -370,7 +360,13 @@ func removePIDFile(cfg *config.Config, log *slog.Logger) {
 // bridge itself erroring out — is logged with the tenant's name and simply
 // ends this goroutine. It never propagates to the other tenants or to the
 // daemon as a whole: one person's session being broken must not take down
-// everyone else's working bridge.
+// everyone else's working bridge. This mirrors runDiscord: a backend that
+// isn't ready yet fails fast rather than looping waiting for it, since
+// GMessages is just one backend among others now (see docs/discord-adapter-
+// design.md), not the thing the daemon's startup revolves around. Pairing is
+// on-demand — "msg-gw pair NAME" (locally or --remote) followed by
+// "msg-gw reload" is how an operator brings this user's bridge up once it's
+// done, the same mechanism already used to pick up any other config change.
 func runUser(ctx context.Context, cfg *config.Config, user config.UserConfig, log *slog.Logger, db *storage.DB, mm *mattermost.Client) {
 	log = log.With("user", user.Name)
 
@@ -379,9 +375,10 @@ func runUser(ctx context.Context, cfg *config.Config, user config.UserConfig, lo
 		log.Error("misconfigured, not starting", "error", err)
 		return
 	}
-	gm, err := newGMessagesClientWithRetry(ctx, log, gmCfg)
+	gm, err := gmessages.New(gmCfg)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, gmessages.ErrNotPaired) {
+			log.Warn(`not paired with Google Messages yet; run "msg-gw pair" (or pair --remote), then "msg-gw reload"`)
 			return
 		}
 		log.Error("could not start", "error", err)
@@ -501,29 +498,4 @@ func startPersistentListener(ctx context.Context, lcfg config.ListenerConfig, sh
 	}()
 
 	return &daemonListener{cfg: lcfg, cancel: cancel, done: done}, nil
-}
-
-// newGMessagesClientWithRetry builds the Google Messages client, retrying
-// while no session has been paired yet. This gives an operator who starts the
-// daemon and "msg-gw pair NAME" as separate steps (e.g. two container
-// commands) a window to pair before this user's bridge gives up.
-func newGMessagesClientWithRetry(ctx context.Context, log *slog.Logger, gmCfg gmessages.Config) (*gmessages.Client, error) {
-	for attempt := 1; ; attempt++ {
-		gm, err := gmessages.New(gmCfg)
-		if err == nil {
-			return gm, nil
-		}
-		if !errors.Is(err, gmessages.ErrNotPaired) || attempt >= unpairedStartupRetries {
-			return nil, err
-		}
-
-		log.Warn("not paired with Google Messages yet, will retry",
-			"attempt", attempt, "max_attempts", unpairedStartupRetries, "retry_in", unpairedStartupInterval)
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(unpairedStartupInterval):
-		}
-	}
 }
