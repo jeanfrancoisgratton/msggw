@@ -60,6 +60,17 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Wed Sep 30 2026 Binary package builder <builder@famillegratton.net> 0.4.2-1
+- chore: test build
+- chore: test build
+- Merge branch 'gmessages_integration' into discord_integration
+- enhancement: the daemon does not die anymore if no phone is paired
+- chore: document new non gmessages-centric approach
+- chore: doc update
+- chore: version bump
+- Merge branch 'main' into develop
+- chore: update changelog for 0.3.3-1
+
 * Wed Sep 23 2026 Binary package builder <builder@famillegratton.net> 0.3.3-1
 - test build #2
 - gitignore fix
