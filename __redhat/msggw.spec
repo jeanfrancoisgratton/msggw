@@ -60,6 +60,13 @@ install -Dpm 0755 %{_builddir}/%{name}-%{version}/%{_binaryname} %{buildroot}%{_
 
 
 %changelog
+* Wed Sep 30 2026 Binary package builder <builder@famillegratton.net> 0.50.0-1
+- fixed regression where daemon exited when no phone paired
+- Merge branch 'develop'
+- bug(ALPINEBUILDER): wrong repo target
+- chore: update changelog for 0.4.2-2
+- bug(WINBUILDER): fixed wrong target nexus repo
+
 * Wed Sep 30 2026 Binary package builder <builder@famillegratton.net> 0.4.2-2
 - Merge remote-tracking branch 'refs/remotes/origin/develop' into develop
 - chore: new nexus repos for builders, test build
