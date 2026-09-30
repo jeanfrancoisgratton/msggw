@@ -49,7 +49,7 @@ DESCRIPTION  := $(shell jq -r '.description'   $(MANIFEST))
 MANUFACTURER := $(shell jq -r '.manufacturer'  $(MANIFEST))
 MSIVERSION   := $(shell echo $(VERSION) | cut -d. -f1,2).$(RELEASE)
 
-NEXUSREPO := winLocal
+NEXUSREPO := windows
 SRCDIR    := ../src
 ARCH      := amd64
 STAGING   := $(NAME)-$(VERSION)-$(RELEASE)_windows_$(ARCH)
