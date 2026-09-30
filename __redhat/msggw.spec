@@ -3,8 +3,8 @@
 %define _name msggw
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
-%define _version 0.4.2
-%define _rel 2
+%define _version 0.50.0
+%define _rel 1
 %define _arch x86_64
 %define _binaryname msg-gw
 

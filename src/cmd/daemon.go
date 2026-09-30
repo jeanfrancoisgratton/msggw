@@ -131,9 +131,9 @@ reload never drops a client's connection to it.`,
 				return nil
 
 			case err := <-genDone:
-				// The generation ended on its own — every user's bridge
-				// exited (e.g. none of them are paired yet, or a fatal
-				// setup error) — not because of a shutdown or a reload.
+				// The generation ended on its own — a fatal setup error
+				// (storage, Mattermost) — not because of a shutdown or a
+				// reload. Bridges exiting do not end it; see runGeneration.
 				cancelGen()
 				return err
 
@@ -322,6 +322,10 @@ func runGeneration(ctx context.Context, cfg *config.Config, log *slog.Logger, re
 		}()
 	}
 
+	// A generation lasts until it is shut down or replaced by a reload, not
+	// until its bridges exit: a user that is not paired yet (or whose bridge
+	// died) is brought back by "msg-gw reload", which needs a live daemon.
+	<-ctx.Done()
 	wg.Wait()
 	return nil
 }
