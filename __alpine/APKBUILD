@@ -2,7 +2,7 @@
 # Packager: Package builder <builder@famillegratton.net>
 pkgname=msggw
 pkgver=0.4.2
-pkgrel=1
+pkgrel=2
 pkgdir=/data/packages
 pkgdesc="Messages <-> Mattermost bridge"
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
@@ -24,6 +24,12 @@ build() {
 	cd "$builddir"
 
 	go env | egrep 'GOFLAGS|CGO_ENABLED|GOOS|GOARCH' || true
+
+	# abuild runs build() with set -e, so both of these fast-fail the package
+	# build; go test exits 0 for packages with no test files and only fails
+	# on an actual test failure.
+	go vet ./...
+	go test ./...
 
 	builddate="$(date +%Y.%m.%d)"
 

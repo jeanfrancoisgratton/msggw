@@ -6,7 +6,8 @@ SOURCES   := $(HOME)/rpmbuild/SOURCES
 RPMS      := $(HOME)/rpmbuild/RPMS
 DEST      := /data
 REPOROOT  := $(shell git rev-parse --show-toplevel)
-NEXUSREPO := dnfLocal
+NEXUSREPO := redhat
+
 # RPM uses '~' as its pre-release separator (0.30.00~DEBUG sorts *before*
 # 0.30.00), but git forbids '~' in a ref name. Swapping it for '-' yields a
 # valid tag that is also a valid SemVer pre-release, so it keeps the same

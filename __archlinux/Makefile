@@ -20,7 +20,7 @@ PKGREL    := $(shell . ./$(PKGBUILD); echo $$pkgrel)
 ARCH      := $(shell . ./$(PKGBUILD); echo $${arch[0]})
 BINARY    := $(shell . ./$(PKGBUILD); echo $$_binaryname)
 
-NEXUSREPO := archLocal
+NEXUSREPO := archlinux
 PKGDEST   := /data
 PKGEXT    := pkg.tar.zst
 

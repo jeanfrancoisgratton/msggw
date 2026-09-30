@@ -86,4 +86,10 @@ MSGGWVERSION="$(sed -n 's/.*"versionnumber": *"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/.
 BUILDDATE="$(date +%Y.%m.%d)"
 
 cd "$SRC_DIR"
+
+# set -eu (above) fast-fails on either of these; go test exits 0 for packages
+# with no test files and only fails on an actual test failure.
+go vet ./...
+go test ./...
+
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=$MSGGWVERSION -X msggw/cmd.buildDate=$BUILDDATE" -o "$BUILD_OUTPATH" .

@@ -41,14 +41,21 @@ Getting started (no root needed — this writes to your own
 }
 
 // buildVersion and buildDate are set via -ldflags -X at package-build time.
+// Each __*/ builder reads its own already-authoritative version field
+// (APKBUILD's pkgver, PKGBUILD's pkgver, control's Version minus the Debian
+// revision, the spec's %{_version}); src/build.sh, __macos/build-macos.sh and
+// __windows/Makefile read msggw.json since they aren't tied to any one
+// distro's packaging file. The fallbacks below are what you get from a plain
+// `go build .` with no ldflags, e.g. local development.
 var buildVersion = "dev"
 var buildDate = "unknown"
 
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Shows the software version",
+	Use:     "version",
+	Example: "msg-gw version",
+	Short:   "Shows the software version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(hftx.White("msg-gw " + buildVersion + " (" + buildDate + "), Go version = v" + strings.TrimPrefix(runtime.Version(), "go")))
+		fmt.Println(hftx.White("msg-gw v" + buildVersion + " (" + buildDate + "), Go version = v" + strings.TrimPrefix(runtime.Version(), "go") + " (" + runtime.GOARCH + ")"))
 	},
 }
 

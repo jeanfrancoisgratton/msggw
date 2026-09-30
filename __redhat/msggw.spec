@@ -4,7 +4,7 @@
 %define _prefix /opt
 %define _bindir %{_prefix}/sbin
 %define _version 0.4.2
-%define _rel 1
+%define _rel 2
 %define _arch x86_64
 %define _binaryname msg-gw
 
@@ -32,6 +32,11 @@ Messages <-> Mattermost bridge
 %build
 cd src
 go mod download
+# rpmbuild runs %build under set -e, so both of these fast-fail the package
+# build; go test exits 0 for packages with no test files and only fails on
+# an actual test failure.
+PATH=$PATH:/opt/go/bin CGO_ENABLED=0 go vet ./...
+PATH=$PATH:/opt/go/bin CGO_ENABLED=0 go test ./...
 PATH=$PATH:/opt/go/bin CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=%{_version} -X msggw/cmd.buildDate=%(date +%%Y.%%m.%%d)" -o %{_builddir}/%{name}-%{version}/%{_binaryname} .
 
 %clean

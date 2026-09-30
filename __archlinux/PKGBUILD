@@ -3,7 +3,7 @@
 
 pkgname=msggw
 pkgver=0.4.2
-pkgrel=1
+pkgrel=2
 pkgdesc="Messages <-> Mattermost bridge"
 arch=('x86_64')
 url="https://git.famillegratton.net:3000/mainline/msggw.git"
@@ -33,14 +33,18 @@ build() {
   export GOPATH="${srcdir}/gopath"
   export GOMODCACHE="${GOPATH}/pkg/mod"
 
+  # makepkg only runs check() when invoked with --check, which the packaging
+  # Makefile never passes, so vet/test are run inline here instead to
+  # guarantee they always run. makepkg runs build() under bash's default
+  # errexit-on-uncaught-error behavior for the script as a whole, so both of
+  # these fast-fail; go test exits 0 for packages with no test files and
+  # only fails on an actual test failure.
+  go vet -modcacherw ./...
+  go test -modcacherw ./...
+
   builddate="$(date +%Y.%m.%d)"
 
   go build -trimpath -mod=readonly -modcacherw -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=${pkgver} -X msggw/cmd.buildDate=${builddate}" -o "${_binaryname}" .
-}
-
-check() {
-  cd "${srcdir}/${_builddir}"
-  go test -modcacherw ./...
 }
 
 package() {

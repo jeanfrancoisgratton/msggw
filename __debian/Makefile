@@ -28,7 +28,7 @@ BINARY    := msg-gw
 UPSTREAM_VERSION := $(shell echo $(VERSION) | sed 's/-[^-]*$$//')
 BUILDDATE         := $(shell date +%Y.%m.%d)
 
-NEXUSREPO := aptLocal
+NEXUSREPO := debian
 SRCDIR    := ../src
 STAGING   := $(NAME)-$(VERSION)_$(ARCH)
 DEB       := $(CURDIR)/$(STAGING).deb
@@ -42,6 +42,11 @@ build:
 	# copyright is documentation, not a control file: policy puts it at
 	# /usr/share/doc/<package>/copyright, and it must be 0644 there.
 	install -m 0644 copyright "$(STAGING)/usr/share/doc/$(NAME)/copyright"
+	# Make aborts this recipe on the first failing line, so both of these
+	# fast-fail the package build; go test exits 0 for packages with no test
+	# files and only fails on an actual test failure.
+	cd $(SRCDIR) && go vet ./...
+	cd $(SRCDIR) && go test ./...
 	cd $(SRCDIR) && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X msggw/cmd.buildVersion=$(UPSTREAM_VERSION) -X msggw/cmd.buildDate=$(BUILDDATE)" \
 	  -o "$(CURDIR)/$(STAGING)/opt/sbin/$(BINARY)" .
 	sudo chown -R 0:0 "$(STAGING)/opt/sbin/$(BINARY)"
